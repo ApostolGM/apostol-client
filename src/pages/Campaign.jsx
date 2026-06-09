@@ -22,7 +22,8 @@ export default function Campaign({ user }) {
   const socketRef = useRef(null);
   const chatRef = useRef(null);
 
-  const isMaster = campaign?.members?.find(m => m.user_id === user.id)?.role === 'master';
+ const userRole = campaign?.members?.find(m => m.user_id === user.id)?.role;
+const isMaster = userRole === 'master' || userRole === 'co-master';
   const userMember = campaign?.members?.find(m => m.user_id === user.id);
 
   const addMessage = useCallback((msg) => {
@@ -188,13 +189,13 @@ export default function Campaign({ user }) {
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0">
           {/* Вкладки */}
-          <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
-            <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 text-sm ${activeTab === 'chat' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Чат</button>
-            <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
-            {isMaster && (
-              <button onClick={() => setActiveTab('npcs')} className={`px-4 py-2 text-sm ${activeTab === 'npcs' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>NPC</button>
-            )}
-          </div>
+         <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
+  <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 text-sm ${activeTab === 'chat' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Чат</button>
+  <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
+  {isMaster && (
+    <button onClick={() => setActiveTab('npcs')} className={`px-4 py-2 text-sm ${activeTab === 'npcs' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>NPC</button>
+  )}
+</div>
 
           {/* Чат */}
           {activeTab === 'chat' && (
