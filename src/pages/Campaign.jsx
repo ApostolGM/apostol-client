@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../api';
+import NPCPanel from '../components/NPCPanel';
 
 const SOCKET_URL = 'https://apostol-api.onrender.com';
 
@@ -186,10 +187,13 @@ export default function Campaign({ user }) {
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
+         <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
             <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 text-sm ${activeTab === 'chat' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Чат</button>
-            <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
-          </div>
+           <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
+  {isMaster && (
+    <button onClick={() => setActiveTab('npcs')} className={`px-4 py-2 text-sm ${activeTab === 'npcs' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>NPC</button>
+  )}
+</div>
 
           {activeTab === 'chat' && (
             <>
@@ -218,6 +222,11 @@ export default function Campaign({ user }) {
           )}
 
           {activeTab === 'character' && (
+            {activeTab === 'npcs' && isMaster && (
+  <div className="flex-1 overflow-y-auto p-4">
+    <NPCPanel campaignId={id} socketRef={socketRef} />
+  </div>
+)}
             <div className="flex-1 overflow-y-auto p-4">
               {!character && !showCreateChar && (
                 <div className="text-center mt-8">
