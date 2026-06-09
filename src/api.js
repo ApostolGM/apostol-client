@@ -55,4 +55,7 @@ export const api = {
     request('/inventory/unequip', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
   reloadWeapon: (weaponSlotId) =>
     request('/inventory/reload', { method: 'POST', body: JSON.stringify({ weapon_slot_id: weaponSlotId }) }),
+    shootWeapon: (slotId) => request('/inventory/shoot', { method: 'POST', body: JSON.stringify({ weapon_slot_id: slotId }) }),
+  consumeItem: (slotId) => request('/inventory/consume', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+  moveItem: (slotId, newSlot) => request('/inventory/move', { method: 'POST', body: JSON.stringify({ slot_id: slotId, new_slot_type: newSlot }) }),
 };
