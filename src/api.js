@@ -72,4 +72,12 @@ export const api = {
     request('/inventory/use', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
   reloadWeapon: (slotId) =>
     request('/inventory/reload', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+
+  // Scenes
+  getScenes: (campaignId, type) => request(`/scenes/${campaignId}?type=${type || 'local'}`),
+  updateScene: (campaignId, data) => request(`/scenes/${campaignId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Backgrounds
+  uploadBackground: (campaignId, name, url) => request('/upload/background', { method: 'POST', body: JSON.stringify({ campaign_id: campaignId, name, url }) }),
+  getBackgrounds: (campaignId) => request(`/backgrounds/${campaignId}`),
 };
