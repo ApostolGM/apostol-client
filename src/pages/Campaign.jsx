@@ -187,14 +187,16 @@ export default function Campaign({ user }) {
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0">
-         <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
+          {/* Вкладки */}
+          <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
             <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 text-sm ${activeTab === 'chat' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Чат</button>
-           <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
-  {isMaster && (
-    <button onClick={() => setActiveTab('npcs')} className={`px-4 py-2 text-sm ${activeTab === 'npcs' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>NPC</button>
-  )}
-</div>
+            <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
+            {isMaster && (
+              <button onClick={() => setActiveTab('npcs')} className={`px-4 py-2 text-sm ${activeTab === 'npcs' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>NPC</button>
+            )}
+          </div>
 
+          {/* Чат */}
           {activeTab === 'chat' && (
             <>
               <div ref={chatRef} className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -221,12 +223,8 @@ export default function Campaign({ user }) {
             </>
           )}
 
+          {/* Персонаж */}
           {activeTab === 'character' && (
-            {activeTab === 'npcs' && isMaster && (
-  <div className="flex-1 overflow-y-auto p-4">
-    <NPCPanel campaignId={id} socketRef={socketRef} />
-  </div>
-)}
             <div className="flex-1 overflow-y-auto p-4">
               {!character && !showCreateChar && (
                 <div className="text-center mt-8">
@@ -254,6 +252,13 @@ export default function Campaign({ user }) {
                   onRollSkill={rollSkill}
                 />
               )}
+            </div>
+          )}
+
+          {/* NPC (только мастер) */}
+          {activeTab === 'npcs' && isMaster && (
+            <div className="flex-1 overflow-y-auto p-4">
+              <NPCPanel campaignId={id} socketRef={socketRef} onRollNPC={rollSkill} />
             </div>
           )}
         </div>
@@ -427,7 +432,6 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      {/* Заголовок */}
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
         <div className="flex justify-between items-start">
           <div>
@@ -441,7 +445,6 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
         </div>
       </div>
 
-      {/* Состояние */}
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-wasteland-300 font-stylized">Состояние</h3>
@@ -485,7 +488,6 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
         )}
       </div>
 
-      {/* Навыки */}
       {character.skills?.length > 0 && (
         <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
           <h3 className="text-wasteland-300 font-stylized mb-3">Навыки (нажми для броска)</h3>
@@ -509,7 +511,6 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
         </div>
       )}
 
-      {/* Перки */}
       {character.perks?.length > 0 && (
         <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
           <h3 className="text-wasteland-300 font-stylized mb-2">Перки</h3>
