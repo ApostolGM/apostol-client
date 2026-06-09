@@ -1,42 +1,83 @@
-import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { api } from './api';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Campaign from './pages/Campaign';
+const API_URL = 'https://apostol-api.onrender.com/api';
 
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      api.me()
-        .then(u => setUser(u))
-        .catch(() => localStorage.removeItem('token'))
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-wasteland-900">
-        <p className="text-wasteland-300 text-lg font-stylized">Загрузка...</p>
-      </div>
-    );
-  }
-
-  return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setUser={setUser} />} />
-      <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register setUser={setUser} />} />
-      <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} />
-      <Route path="/campaign/:id" element={user ? <Campaign user={user} /> : <Navigate to="/login" />} />
-      <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
-    </Routes>
-  );
+function getToken() {
+  return localStorage.getItem('token');
 }
+
+async function request(path, options = {}) {
+  const token = getToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options.headers,
+  };
+  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Ошибка запроса');
+  return data;
+}
+
+export const api = {
+  // Auth
+  register: (u, p) => request('/auth/register', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
+  login: (u, p) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
+  me: () => request('/auth/me'),
+
+  // Campaigns
+  getCampaigns: () => request('/campaigns'),
+  getCampaign: (id) => request(`/campaigns/${id}`),
+  createCampaign: (title) => request('/campaigns', { method: 'POST', body: JSON.stringify({ title }) }),
+  joinCampaign: (code) => request(`/campaigns/join/${code}`, { method: 'POST' }),
+
+  // Professions
+  getProfessions: () => request('/professions'),
+
+  // Perks
+  getPerks: () => request('/perks'),
+
+  // Skills
+  getSkills: () => request('/skills'),
+
+  // Characters
+  createCharacter: (data) => request('/characters', { method: 'POST', body: JSON.stringify(data) }),
+  getCharacter: (id) => request(`/characters/${id}`),
+  updateCharacterParams: (id, params) => request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
+
+  // Dice
+  diceAuto: (characterId, skillName) => request('/dice/auto', { method: 'POST', body: JSON.stringify({ character_id: characterId, skill_name: skillName }) }),
+
+  // NPC
+  getNPCs: (campaignId) => request(`/npcs?campaign_id=${campaignId}`),
+  getTemplates: () => request('/npcs?is_template=true'),
+  createNPC: (data) => request('/npcs', { method: 'POST', body: JSON.stringify(data) }),
+  updateNPC: (id, data) => request(`/npcs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteNPC: (id) => request(`/npcs/${id}`, { method: 'DELETE' }),
+  cloneNPC: (id, name) => request(`/npcs/${id}/clone`, { method: 'POST', body: JSON.stringify({ name }) }),
+  rollNPC: (id, skillName) => request(`/npcs/${id}/roll`, { method: 'POST', body: JSON.stringify({ skill_name: skillName }) }),
+
+  // Items
+  getItems: () => request('/items'),
+  createItem: (data) => request('/items', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Inventory
+  addItem: (characterId, itemId, quantity, slotType) =>
+    request('/inventory/add', { method: 'POST', body: JSON.stringify({ character_id: characterId, item_id: itemId, quantity, slot_type: slotType }) }),
+  removeItem: (slotId, quantity) =>
+    request('/inventory/remove', { method: 'POST', body: JSON.stringify({ slot_id: slotId, quantity }) }),
+  equipItem: (slotId) =>
+    request('/inventory/equip', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+  unequipItem: (slotId) =>
+    request('/inventory/unequip', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+  useItem: (slotId) =>
+    request('/inventory/use', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+  reloadWeapon: (slotId) =>
+    request('/inventory/reload', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+
+  // Scenes
+  getScenes: (campaignId, type) => request(`/scenes/${campaignId}?type=${type || 'local'}`),
+  updateScene: (campaignId, data) => request(`/scenes/${campaignId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Backgrounds
+  uploadBackground: (campaignId, name, url) => request('/upload/background', { method: 'POST', body: JSON.stringify({ campaign_id: campaignId, name, url }) }),
+  getBackgrounds: (campaignId) => request(`/backgrounds/${campaignId}`),
+};
