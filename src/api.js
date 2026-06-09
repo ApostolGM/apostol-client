@@ -11,52 +11,37 @@ async function request(path, options = {}) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
-
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
   const data = await res.json();
-
   if (!res.ok) throw new Error(data.error || 'Ошибка запроса');
   return data;
 }
 
 export const api = {
-  // Auth
-  register: (username, password) =>
-    request('/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) }),
-  login: (username, password) =>
-    request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  register: (u, p) => request('/auth/register', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
+  login: (u, p) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
   me: () => request('/auth/me'),
-
-  // Campaigns
   getCampaigns: () => request('/campaigns'),
   getCampaign: (id) => request(`/campaigns/${id}`),
-  createCampaign: (title) =>
-    request('/campaigns', { method: 'POST', body: JSON.stringify({ title }) }),
-  joinCampaign: (code) =>
-    request(`/campaigns/join/${code}`, { method: 'POST' }),
-
-  // Professions
+  createCampaign: (title) => request('/campaigns', { method: 'POST', body: JSON.stringify({ title }) }),
+  joinCampaign: (code) => request(`/campaigns/join/${code}`, { method: 'POST' }),
   getProfessions: () => request('/professions'),
-
-  // Perks
   getPerks: () => request('/perks'),
-
-  // Skills
   getSkills: () => request('/skills'),
-
-  // Characters
-  createCharacter: (data) =>
-    request('/characters', { method: 'POST', body: JSON.stringify(data) }),
+  createCharacter: (data) => request('/characters', { method: 'POST', body: JSON.stringify(data) }),
   getCharacter: (id) => request(`/characters/${id}`),
-  updateCharacterParams: (id, params) =>
-    request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
+  updateCharacterParams: (id, params) => request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
+  diceAuto: (characterId, skillName) => request('/dice/auto', { method: 'POST', body: JSON.stringify({ character_id: characterId, skill_name: skillName }) }),
 
-  // Dice auto
-  diceAuto: (characterId, skillName) =>
-    request('/dice/auto', { method: 'POST', body: JSON.stringify({ character_id: characterId, skill_name: skillName }) }),
+  // NPC
+  getNPCs: (campaignId) => request(`/npcs?campaign_id=${campaignId}`),
+  getTemplates: () => request('/npcs?is_template=true'),
+  createNPC: (data) => request('/npcs', { method: 'POST', body: JSON.stringify(data) }),
+  updateNPC: (id, data) => request(`/npcs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteNPC: (id) => request(`/npcs/${id}`, { method: 'DELETE' }),
+  cloneNPC: (id, name) => request(`/npcs/${id}/clone`, { method: 'POST', body: JSON.stringify({ name }) }),
+  rollNPC: (id, skillName) => request(`/npcs/${id}/roll`, { method: 'POST', body: JSON.stringify({ skill_name: skillName }) }),
 
-  // Items
   getItems: () => request('/items'),
-  createItem: (data) =>
-    request('/items', { method: 'POST', body: JSON.stringify(data) }),
+  createItem: (data) => request('/items', { method: 'POST', body: JSON.stringify(data) }),
 };
