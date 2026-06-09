@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../api';
 import NPCPanel from '../components/NPCPanel';
+import InventoryPanel from '../components/InventoryPanel';
 
 const SOCKET_URL = 'https://apostol-api.onrender.com';
 
@@ -189,9 +190,10 @@ const isMaster = userRole === 'master' || userRole === 'co-master';
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0">
           {/* Вкладки */}
-         <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
+        <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
   <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 text-sm ${activeTab === 'chat' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Чат</button>
   <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
+  <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 text-sm ${activeTab === 'inventory' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Инвентарь</button>
   {isMaster && (
     <button onClick={() => setActiveTab('npcs')} className={`px-4 py-2 text-sm ${activeTab === 'npcs' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>NPC</button>
   )}
@@ -224,6 +226,17 @@ const isMaster = userRole === 'master' || userRole === 'co-master';
             </>
           )}
 
+          {activeTab === 'inventory' && character && (
+  <div className="flex-1 overflow-y-auto p-4">
+    <InventoryPanel character={character} onRefresh={refreshCharacter} />
+  </div>
+)}
+{activeTab === 'inventory' && !character && (
+  <div className="flex-1 overflow-y-auto p-4 text-center text-wasteland-400 mt-8">
+    Сначала создайте персонажа
+  </div>
+)}
+
           {/* Персонаж */}
           {activeTab === 'character' && (
             <div className="flex-1 overflow-y-auto p-4">
@@ -255,6 +268,8 @@ const isMaster = userRole === 'master' || userRole === 'co-master';
               )}
             </div>
           )}
+
+          
 
           {/* NPC (только мастер) */}
           {activeTab === 'npcs' && isMaster && (
