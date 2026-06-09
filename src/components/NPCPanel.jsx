@@ -149,6 +149,11 @@ export default function NPCPanel({ campaignId, socketRef }) {
     }
   };
 
+  const skillsExample = `[
+  {"name": "Атака", "modifier": 5},
+  {"name": "Уклонение", "modifier": 3}
+]`;
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -165,7 +170,9 @@ export default function NPCPanel({ campaignId, socketRef }) {
 
       {showCreate && (
         <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 space-y-3">
-          <h3 className="text-wasteland-300 font-stylized">{editingId ? 'Редактировать NPC' : 'Новый NPC'}</h3>
+          <h3 className="text-wasteland-300 font-stylized">
+            {editingId ? 'Редактировать NPC' : 'Новый NPC'}
+          </h3>
 
           <input
             className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm"
@@ -188,18 +195,18 @@ export default function NPCPanel({ campaignId, socketRef }) {
               rows={3}
               value={form.health_thresholds}
               onChange={e => setForm({ ...form, health_thresholds: e.target.value })}
+              placeholder='{"здоров": 100, "ранен": 50, "при смерти": 0}'
             />
           </div>
 
           <div>
-            <label className="text-wasteland-400 text-xs">
-              Навыки (JSON): пример: [{"name": "Атака", "modifier": 5}]
-            </label>
+            <label className="text-wasteland-400 text-xs">Навыки (JSON):</label>
             <textarea
               className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm font-mono"
-              rows={3}
+              rows={4}
               value={form.skills}
               onChange={e => setForm({ ...form, skills: e.target.value })}
+              placeholder={skillsExample}
             />
           </div>
 
@@ -254,10 +261,10 @@ export default function NPCPanel({ campaignId, socketRef }) {
                 )}
               </div>
               <div className="flex gap-1">
-                <button onClick={() => handleEdit(npc)} className="text-wasteland-400 hover:text-wasteland-200 text-xs px-2 py-1">✏️</button>
-                <button onClick={() => handleClone(npc)} className="text-wasteland-400 hover:text-wasteland-200 text-xs px-2 py-1">📋</button>
-                <button onClick={() => handleSaveAsTemplate(npc)} className="text-wasteland-400 hover:text-accent-yellow text-xs px-2 py-1">💾</button>
-                <button onClick={() => handleDelete(npc.id)} className="text-wasteland-400 hover:text-accent-red text-xs px-2 py-1">🗑️</button>
+                <button onClick={() => handleEdit(npc)} className="text-wasteland-400 hover:text-wasteland-200 text-xs px-2 py-1" title="Редактировать">✏️</button>
+                <button onClick={() => handleClone(npc)} className="text-wasteland-400 hover:text-wasteland-200 text-xs px-2 py-1" title="Клонировать">📋</button>
+                <button onClick={() => handleSaveAsTemplate(npc)} className="text-wasteland-400 hover:text-accent-yellow text-xs px-2 py-1" title="В шаблон">💾</button>
+                <button onClick={() => handleDelete(npc.id)} className="text-wasteland-400 hover:text-accent-red text-xs px-2 py-1" title="Удалить">🗑️</button>
               </div>
             </div>
 
