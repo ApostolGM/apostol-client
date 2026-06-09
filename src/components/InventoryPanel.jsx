@@ -155,7 +155,7 @@ function SlotRow({ slot, refresh, getDurabilityColor, getWeaponIcon }) {
           {slot.equipped && (item?.weapon_type === 'ranged' || item?.weapon_type === 'thrown') && (
             <button onClick={() => act(() => api.useItem(slot.id))} disabled={busy} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-1 rounded text-accent-red">Исп</button>
           )}
-          {!slot.equipped && item?.type === 'расходник' && (
+          {!slot.equipped && item?.type === 'расходник' && item?.trade_category !== 'патроны' && (
             <button onClick={() => act(() => api.useItem(slot.id))} disabled={busy} className="text-xs bg-accent-green/20 hover:bg-accent-green/40 px-2 py-1 rounded text-accent-green">Исп</button>
           )}
           {/* Перезарядить */}
