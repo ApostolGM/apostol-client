@@ -18,19 +18,32 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  // Auth
   register: (u, p) => request('/auth/register', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
   login: (u, p) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
   me: () => request('/auth/me'),
+
+  // Campaigns
   getCampaigns: () => request('/campaigns'),
   getCampaign: (id) => request(`/campaigns/${id}`),
   createCampaign: (title) => request('/campaigns', { method: 'POST', body: JSON.stringify({ title }) }),
   joinCampaign: (code) => request(`/campaigns/join/${code}`, { method: 'POST' }),
+
+  // Professions
   getProfessions: () => request('/professions'),
+
+  // Perks
   getPerks: () => request('/perks'),
+
+  // Skills
   getSkills: () => request('/skills'),
+
+  // Characters
   createCharacter: (data) => request('/characters', { method: 'POST', body: JSON.stringify(data) }),
   getCharacter: (id) => request(`/characters/${id}`),
   updateCharacterParams: (id, params) => request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
+
+  // Dice
   diceAuto: (characterId, skillName) => request('/dice/auto', { method: 'POST', body: JSON.stringify({ character_id: characterId, skill_name: skillName }) }),
 
   // NPC
@@ -42,10 +55,11 @@ export const api = {
   cloneNPC: (id, name) => request(`/npcs/${id}/clone`, { method: 'POST', body: JSON.stringify({ name }) }),
   rollNPC: (id, skillName) => request(`/npcs/${id}/roll`, { method: 'POST', body: JSON.stringify({ skill_name: skillName }) }),
 
+  // Items
   getItems: () => request('/items'),
   createItem: (data) => request('/items', { method: 'POST', body: JSON.stringify(data) }),
+
   // Inventory
-   // Inventory
   addItem: (characterId, itemId, quantity, slotType) =>
     request('/inventory/add', { method: 'POST', body: JSON.stringify({ character_id: characterId, item_id: itemId, quantity, slot_type: slotType }) }),
   removeItem: (slotId, quantity) =>
