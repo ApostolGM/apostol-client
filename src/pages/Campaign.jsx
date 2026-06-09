@@ -26,9 +26,8 @@ export default function Campaign({ user }) {
   const socketRef = useRef(null);
   const chatRef = useRef(null);
 
-  const isMaster = campaign?.members?.find(m => m.user_id === user.id)?.role === 'master';
   const userRole = campaign?.members?.find(m => m.user_id === user.id)?.role;
-  const userMember = campaign?.members?.find(m => m.user_id === user.id);
+  const isMaster = userRole === 'master' || userRole === 'co-master';
 
   const addMessage = useCallback((msg) => {
     setMessages(prev => [...prev, msg]);
@@ -49,17 +48,15 @@ export default function Campaign({ user }) {
 
   useEffect(() => {
     if (!campaign) return;
-
     const socket = io(SOCKET_URL);
     socketRef.current = socket;
-
     socket.emit('join_campaign', { userId: user.id, campaignId: id });
     socket.emit('set_role', userRole || 'player');
 
     socket.on('dice_result', (data) => {
       if (data.hidden) {
         addMessage({
-          user: '🎲 Скрытый',
+          user: 'Скрытый',
           text: `${data.username}: ${data.skillName ? `[${data.skillName}] ` : ''}${data.formula} = ${data.sum}`,
           time: new Date(data.time).toLocaleTimeString(),
         });
@@ -83,31 +80,22 @@ export default function Campaign({ user }) {
     try {
       const c = await api.getCampaign(id);
       setCampaign(c);
-
       const member = c.members?.find(m => m.user_id === user.id);
       if (member?.character_id) {
         const char = await api.getCharacter(member.character_id);
         setCharacter(char);
       }
-
-      // Загружаем NPC кампании
       try {
         const npcData = await api.getNPCs(id);
         setNpcs(npcData);
       } catch (e) { console.error('NPC load error:', e); }
-
-      // Загружаем персонажей всех игроков
       const chars = [];
       for (const m of (c.members || [])) {
         if (m.character_id) {
-          try {
-            const ch = await api.getCharacter(m.character_id);
-            chars.push(ch);
-          } catch (e) { /* персонаж мог быть удалён */ }
+          try { const ch = await api.getCharacter(m.character_id); chars.push(ch); } catch (e) { /* */ }
         }
       }
       setAllCharacters(chars);
-
       const profs = await api.getProfessions();
       setProfessions(profs);
       const allPerks = await api.getPerks();
@@ -145,13 +133,12 @@ export default function Campaign({ user }) {
     const mod = parseInt(match[3] || '0');
     const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1);
     const sum = rolls.reduce((a, b) => a + b, 0) + mod;
-
     if (socketRef.current && campaign) {
       socketRef.current.emit('dice_roll', {
         campaignId: id,
         userId: user.id,
         username: user.username,
-        formula: `${count}d${sides}${mod ? ' + ' + mod : ''} → [${rolls.join(', ')}] + ${mod}`,
+        formula: `${count}d${sides}${mod ? ' + ' + mod : ''} = ${sum}`,
         sum,
         hidden: hiddenMode && isMaster,
       });
@@ -175,7 +162,7 @@ export default function Campaign({ user }) {
         });
       }
     } catch (err) {
-      addMessage({ user: 'Система', text: `Ошибка броска: ${err.message}`, time: new Date().toLocaleTimeString() });
+      addMessage({ user: 'Система', text: `Ошибка: ${err.message}`, time: new Date().toLocaleTimeString() });
     }
   };
 
@@ -191,7 +178,6 @@ export default function Campaign({ user }) {
 
   return (
     <div className="min-h-screen bg-wasteland-900 flex flex-col">
-      {/* Шапка */}
       <header className="bg-wasteland-800 border-b border-wasteland-600 p-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/dashboard')} className="text-wasteland-400 hover:text-wasteland-200">←</button>
@@ -199,11 +185,8 @@ export default function Campaign({ user }) {
         </div>
         <div className="flex items-center gap-3">
           {isMaster && (
-            <button
-              onClick={() => setHiddenMode(!hiddenMode)}
-              className={`text-xs px-2 py-1 rounded ${hiddenMode ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}
-            >
-              {hiddenMode ? '🔒 Скрытый' : '👁 Открытый'}
+            <button onClick={() => setHiddenMode(!hiddenMode)} className={`text-xs px-2 py-1 rounded ${hiddenMode ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>
+              {hiddenMode ? 'Скрытый' : 'Открытый'}
             </button>
           )}
           <span className="text-wasteland-400 text-xs">Код: {campaign.invite_code}</span>
@@ -212,7 +195,6 @@ export default function Campaign({ user }) {
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0">
-          {/* Вкладки */}
           <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
             <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 text-sm ${activeTab === 'chat' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Чат</button>
             <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
@@ -223,13 +205,10 @@ export default function Campaign({ user }) {
             )}
           </div>
 
-          {/* Контент вкладок */}
           {activeTab === 'chat' && (
             <>
               <div ref={chatRef} className="flex-1 overflow-y-auto p-4 space-y-2">
-                {messages.length === 0 && (
-                  <p className="text-wasteland-500 text-center mt-8 text-sm">Чат пуст. /r 2d10 + 3 для броска</p>
-                )}
+                {messages.length === 0 && <p className="text-wasteland-500 text-center mt-8 text-sm">Чат пуст. /r 2d10 + 3 для броска</p>}
                 {messages.map((m, i) => (
                   <div key={i} className={`text-sm ${m.isRoll ? 'bg-wasteland-800/50 p-1.5 rounded border border-wasteland-700' : ''}`}>
                     <span className="text-wasteland-500 text-xs">{m.time}</span>{' '}
@@ -239,12 +218,7 @@ export default function Campaign({ user }) {
                 ))}
               </div>
               <form onSubmit={sendMessage} onKeyDown={handleKeyDown} className="p-3 bg-wasteland-800 border-t border-wasteland-600 flex gap-2">
-                <input
-                  className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 placeholder-wasteland-500 text-sm"
-                  placeholder="Сообщение или /r 2d10 + 3"
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                />
+                <input className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 placeholder-wasteland-500 text-sm" placeholder="Сообщение или /r 2d10 + 3" value={input} onChange={e => setInput(e.target.value)} />
                 <button type="submit" className="bg-wasteland-600 text-wasteland-100 px-4 py-2 rounded text-sm hover:bg-wasteland-500 transition">→</button>
               </form>
             </>
@@ -259,24 +233,10 @@ export default function Campaign({ user }) {
                 </div>
               )}
               {showCreateChar && !character && (
-                <CharacterCreator
-                  professions={professions}
-                  perks={perks}
-                  campaignId={id}
-                  onCreated={(char) => { setCharacter(char); setShowCreateChar(false); }}
-                  onCancel={() => setShowCreateChar(false)}
-                />
+                <CharacterCreator professions={professions} perks={perks} campaignId={id} onCreated={(char) => { setCharacter(char); setShowCreateChar(false); }} onCancel={() => setShowCreateChar(false)} />
               )}
               {character && (
-                <CharacterSheet
-                  character={character}
-                  isMaster={isMaster}
-                  onUpdate={async (params) => {
-                    await api.updateCharacterParams(character.id, params);
-                    refreshCharacter();
-                  }}
-                  onRollSkill={rollSkill}
-                />
+                <CharacterSheet character={character} isMaster={isMaster} onUpdate={async (params) => { await api.updateCharacterParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} />
               )}
             </div>
           )}
@@ -287,20 +247,12 @@ export default function Campaign({ user }) {
             </div>
           )}
           {activeTab === 'inventory' && !character && (
-            <div className="flex-1 overflow-y-auto p-4 text-center text-wasteland-400 mt-8">
-              Сначала создайте персонажа
-            </div>
+            <div className="flex-1 overflow-y-auto p-4 text-center text-wasteland-400 mt-8">Сначала создайте персонажа</div>
           )}
 
           {activeTab === 'scene' && (
             <div className="flex-1 overflow-hidden">
-              <ScenePanel
-                campaignId={id}
-                isMaster={isMaster}
-                socketRef={socketRef}
-                npcs={npcs}
-                characters={allCharacters}
-              />
+              <ScenePanel campaignId={id} isMaster={isMaster} socketRef={socketRef} npcs={npcs} characters={allCharacters} />
             </div>
           )}
 
@@ -311,7 +263,6 @@ export default function Campaign({ user }) {
           )}
         </div>
 
-        {/* Правая панель */}
         <div className="w-full md:w-72 bg-wasteland-800 border-l border-wasteland-600 p-3 overflow-y-auto">
           <h2 className="text-lg font-stylized mb-3 text-wasteland-300">Группа</h2>
           {campaign.members?.map(m => (
@@ -330,7 +281,6 @@ export default function Campaign({ user }) {
   );
 }
 
-// ===== СОЗДАНИЕ ПЕРСОНАЖА =====
 function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel }) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState('');
@@ -366,14 +316,11 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
 
   const handleCreate = async () => {
     if (!name.trim() || balance < 0) return;
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
       const char = await api.createCharacter({ campaign_id: campaignId, name, profession_id: selectedProf.id, perk_ids: selectedPerks.map(p => p.id) });
       onCreated(char);
-    } catch (err) {
-      setError(err.message);
-    } finally { setLoading(false); }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
   const getPerkTypeColor = (type) => {
@@ -386,17 +333,13 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
     <div className="max-w-2xl mx-auto">
       <h2 className="text-xl font-stylized text-accent-orange mb-4">Создание персонажа</h2>
       {error && <p className="text-accent-red text-sm mb-4 bg-wasteland-800 p-3 rounded">{error}</p>}
-
       {step === 1 && (
         <div className="bg-wasteland-800 p-6 rounded-lg border border-wasteland-600 space-y-4">
           <label className="block text-wasteland-300 text-sm">Имя персонажа</label>
           <input className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-3 text-wasteland-100" placeholder="Введите имя..." value={name} onChange={e => setName(e.target.value)} />
-          <button onClick={rollProfessions} disabled={!name.trim()} className="w-full bg-accent-orange text-wasteland-900 font-bold py-3 rounded hover:bg-orange-500 transition disabled:opacity-50">
-            Бросить на профессию (3d{professions.length})
-          </button>
+          <button onClick={rollProfessions} disabled={!name.trim()} className="w-full bg-accent-orange text-wasteland-900 font-bold py-3 rounded hover:bg-orange-500 transition disabled:opacity-50">Бросить на профессию (3d{professions.length})</button>
         </div>
       )}
-
       {step === 2 && (
         <div className="space-y-3">
           <p className="text-wasteland-300 text-sm">Выберите одну из трёх:</p>
@@ -410,7 +353,6 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
           <button onClick={() => setStep(1)} className="text-wasteland-400 text-sm hover:text-wasteland-200">← Назад</button>
         </div>
       )}
-
       {step === 3 && selectedProf && (
         <div className="space-y-4">
           <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
@@ -425,10 +367,7 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
               return (
                 <div key={perk.id} onClick={() => togglePerk(perk)} className={`p-3 rounded-lg border cursor-pointer transition ${isSelected ? 'border-accent-orange bg-wasteland-700' : 'border-wasteland-600 bg-wasteland-800 hover:border-wasteland-500'}`}>
                   <div className="flex justify-between items-start">
-                    <div>
-                      <span className="font-bold text-wasteland-100">{perk.name}</span>
-                      <span className={`ml-2 text-xs ${getPerkTypeColor(perk.type)}`}>{perk.type === 'positive' ? '👍' : perk.type === 'negative' ? '👎' : '➖'} {perk.type}</span>
-                    </div>
+                    <div><span className="font-bold text-wasteland-100">{perk.name}</span><span className={`ml-2 text-xs ${getPerkTypeColor(perk.type)}`}>{perk.type}</span></div>
                     <span className={`text-sm font-bold ${perk.type === 'negative' ? 'text-accent-green' : perk.type === 'positive' ? 'text-accent-red' : 'text-wasteland-400'}`}>{perk.cost > 0 ? '+' : ''}{perk.cost}</span>
                   </div>
                   <p className="text-wasteland-400 text-xs mt-1">{perk.description}</p>
@@ -447,7 +386,6 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
   );
 }
 
-// ===== ЛИСТ ПЕРСОНАЖА =====
 function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
   const [editMode, setEditMode] = useState(false);
   const [params, setParams] = useState({
@@ -472,57 +410,27 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
     return `${params.game_time_date} ${h}:${m}`;
   };
 
-  const getSkillColor = (modifier) => {
-    if (modifier >= 15) return 'text-accent-green';
-    if (modifier >= 10) return 'text-accent-yellow';
-    return 'text-wasteland-300';
-  };
-
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
         <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-xl font-stylized text-wasteland-100">{character.name}</h2>
-            <p className="text-accent-orange">{character.profession?.name}</p>
-          </div>
-          <div className="text-right text-xs text-wasteland-400">
-            <p>Очков: {character.balance_points}</p>
-            <p className="text-wasteland-500 mt-1">🕐 {formatGameTime()}</p>
-          </div>
+          <div><h2 className="text-xl font-stylized text-wasteland-100">{character.name}</h2><p className="text-accent-orange">{character.profession?.name}</p></div>
+          <div className="text-right text-xs text-wasteland-400"><p>Очков: {character.balance_points}</p><p className="text-wasteland-500 mt-1">{formatGameTime()}</p></div>
         </div>
       </div>
-
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-wasteland-300 font-stylized">Состояние</h3>
           {isMaster && (
-            <button onClick={() => editMode ? saveParams() : setEditMode(true)} className={`text-xs px-3 py-1 rounded ${editMode ? 'bg-accent-green text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>
-              {editMode ? 'Сохранить' : 'Изменить'}
-            </button>
+            <button onClick={() => editMode ? saveParams() : setEditMode(true)} className={`text-xs px-3 py-1 rounded ${editMode ? 'bg-accent-green text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>{editMode ? 'Сохранить' : 'Изменить'}</button>
           )}
         </div>
-
-        {[
-          { label: 'Еда', field: 'food', color: '#33cc33' },
-          { label: 'Вода', field: 'water', color: '#3399ff' },
-          { label: 'Стресс', field: 'stress', color: '#cc3333' },
-        ].map(({ label, field, color }) => (
+        {[{ label: 'Еда', field: 'food', color: '#33cc33' },{ label: 'Вода', field: 'water', color: '#3399ff' },{ label: 'Стресс', field: 'stress', color: '#cc3333' }].map(({ label, field, color }) => (
           <div key={field} className="mb-3">
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-wasteland-400">{label}</span>
-              <span className="text-wasteland-300">{params[field]}%</span>
-            </div>
-            <input
-              type="range" min="0" max="100" value={params[field]}
-              onChange={e => handleSlider(field, e.target.value)}
-              disabled={!editMode}
-              className="w-full h-2 rounded appearance-none cursor-pointer"
-              style={{ accentColor: color, opacity: editMode ? 1 : 0.7 }}
-            />
+            <div className="flex justify-between text-sm mb-1"><span className="text-wasteland-400">{label}</span><span className="text-wasteland-300">{params[field]}%</span></div>
+            <input type="range" min="0" max="100" value={params[field]} onChange={e => handleSlider(field, e.target.value)} disabled={!editMode} className="w-full h-2 rounded cursor-pointer" style={{ accentColor: color, opacity: editMode ? 1 : 0.7 }} />
           </div>
         ))}
-
         {editMode && (
           <div className="mt-4 pt-3 border-t border-wasteland-600">
             <p className="text-wasteland-400 text-sm mb-2">Игровое время</p>
@@ -535,42 +443,24 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
           </div>
         )}
       </div>
-
       {character.skills?.length > 0 && (
         <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
-          <h3 className="text-wasteland-300 font-stylized mb-3">Навыки (нажми для броска)</h3>
+          <h3 className="text-wasteland-300 font-stylized mb-3">Навыки</h3>
           <div className="grid grid-cols-2 gap-2">
             {character.skills.map(skill => (
-              <button
-                key={skill.id}
-                onClick={() => onRollSkill(skill.name)}
-                className="bg-wasteland-700 p-3 rounded text-left hover:bg-wasteland-600 hover:border-wasteland-500 border border-transparent transition active:scale-95"
-              >
-                <div className="flex justify-between items-center">
-                  <span className="text-wasteland-200 text-sm">{skill.name}</span>
-                  <span className={`text-sm font-bold ${getSkillColor(skill.totalModifier)}`}>+{skill.totalModifier}%</span>
-                </div>
-                {skill.perkBonus > 0 && (
-                  <p className="text-wasteland-500 text-xs mt-0.5">База: +{skill.modifier}% + Перки: +{skill.perkBonus}%</p>
-                )}
+              <button key={skill.id} onClick={() => onRollSkill(skill.name)} className="bg-wasteland-700 p-3 rounded text-left hover:bg-wasteland-600 hover:border-wasteland-500 border border-transparent transition active:scale-95">
+                <div className="flex justify-between items-center"><span className="text-wasteland-200 text-sm">{skill.name}</span><span className="text-sm font-bold text-accent-green">+{skill.totalModifier}%</span></div>
               </button>
             ))}
           </div>
         </div>
       )}
-
       {character.perks?.length > 0 && (
         <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
           <h3 className="text-wasteland-300 font-stylized mb-2">Перки</h3>
-          <div className="space-y-2">
-            {character.perks.map(perk => (
-              <div key={perk.id} className="text-sm">
-                <span className={`font-bold ${perk.type === 'positive' ? 'text-accent-green' : perk.type === 'negative' ? 'text-accent-red' : 'text-wasteland-300'}`}>{perk.name}</span>
-                <span className="text-wasteland-500 ml-1">({perk.cost > 0 ? '+' : ''}{perk.cost})</span>
-                <p className="text-wasteland-400 text-xs">{perk.effect_text}</p>
-              </div>
-            ))}
-          </div>
+          {character.perks.map(perk => (
+            <div key={perk.id} className="text-sm"><span className={`font-bold ${perk.type === 'positive' ? 'text-accent-green' : perk.type === 'negative' ? 'text-accent-red' : 'text-wasteland-300'}`}>{perk.name}</span><span className="text-wasteland-500 ml-1">({perk.cost > 0 ? '+' : ''}{perk.cost})</span><p className="text-wasteland-400 text-xs">{perk.effect_text}</p></div>
+          ))}
         </div>
       )}
     </div>
