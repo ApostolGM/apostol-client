@@ -51,6 +51,10 @@ export const api = {
   updateCharacterParams: (id, params) =>
     request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
 
+  // Dice auto
+  diceAuto: (characterId, skillName) =>
+    request('/dice/auto', { method: 'POST', body: JSON.stringify({ character_id: characterId, skill_name: skillName }) }),
+
   // Items
   getItems: () => request('/items'),
   createItem: (data) =>
