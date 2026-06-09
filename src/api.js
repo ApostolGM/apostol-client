@@ -44,4 +44,15 @@ export const api = {
 
   getItems: () => request('/items'),
   createItem: (data) => request('/items', { method: 'POST', body: JSON.stringify(data) }),
+  // Inventory
+  addItem: (characterId, itemId, quantity, slotType) =>
+    request('/inventory/add', { method: 'POST', body: JSON.stringify({ character_id: characterId, item_id: itemId, quantity, slot_type: slotType }) }),
+  removeItem: (slotId, quantity) =>
+    request('/inventory/remove', { method: 'POST', body: JSON.stringify({ slot_id: slotId, quantity }) }),
+  equipItem: (slotId) =>
+    request('/inventory/equip', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+  unequipItem: (slotId) =>
+    request('/inventory/unequip', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+  reloadWeapon: (weaponSlotId) =>
+    request('/inventory/reload', { method: 'POST', body: JSON.stringify({ weapon_slot_id: weaponSlotId }) }),
 };
