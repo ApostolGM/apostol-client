@@ -29,6 +29,11 @@ export const api = {
   createCampaign: (title) => request('/campaigns', { method: 'POST', body: JSON.stringify({ title }) }),
   joinCampaign: (code) => request(`/campaigns/join/${code}`, { method: 'POST' }),
 
+  // Chat  ← ВОТ СЮДА
+  getChatMessages: (campaignId) => request(`/chat/${campaignId}`),
+  sendChatMessage: (campaignId, text, isRoll) => request(`/chat/${campaignId}`, { method: 'POST', body: JSON.stringify({ text, is_roll: isRoll || false }) }),
+
+  
   // Professions
   getProfessions: () => request('/professions'),
 
