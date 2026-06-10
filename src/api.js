@@ -43,6 +43,9 @@ export const api = {
   getCharacter: (id) => request(`/characters/${id}`),
   updateCharacterParams: (id, params) => request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
 
+  // Master characters
+  getCampaignCharacters: (campaignId) => request(`/campaigns/${campaignId}/characters`),
+
   // Dice
   diceAuto: (characterId, skillName) => request('/dice/auto', { method: 'POST', body: JSON.stringify({ character_id: characterId, skill_name: skillName }) }),
 
@@ -72,6 +75,15 @@ export const api = {
     request('/inventory/use', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
   reloadWeapon: (slotId) =>
     request('/inventory/reload', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+
+  // Master inventory
+  updateInventorySlot: (slotId, data) => request(`/inventory/${slotId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  masterAddItem: (characterId, itemId, quantity, slotType) =>
+    request('/master/inventory/add', { method: 'POST', body: JSON.stringify({ character_id: characterId, item_id: itemId, quantity, slot_type: slotType }) }),
+
+  // Modifications
+  addMod: (slotId, modItemId) => request(`/inventory/${slotId}/mod`, { method: 'POST', body: JSON.stringify({ mod_item_id: modItemId }) }),
+  removeMod: (slotId, modItemId) => request(`/inventory/${slotId}/mod/${modItemId}`, { method: 'DELETE' }),
 
   // Scenes
   getScenes: (campaignId, type) => request(`/scenes/${campaignId}?type=${type || 'local'}`),
