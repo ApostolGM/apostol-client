@@ -180,7 +180,7 @@ export default function Campaign({ user }) {
   const tabs = [
     { key: 'chat', label: 'Чат' },
     { key: 'character', label: 'Перс' },
-    ...(isMaster ? [] : [{ key: 'inventory', label: 'Инв' }]),
+    ...(!isMaster ? [{ key: 'inventory', label: 'Инв' }] : []),
     { key: 'scene', label: 'Сцена' },
     ...(isMaster ? [{ key: 'npcs', label: 'NPC' }] : []),
   ];
