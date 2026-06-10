@@ -10,22 +10,19 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const [bgNameInput, setBgNameInput] = useState('');
   const [selectedBg, setSelectedBg] = useState(null);
   const [tokens, setTokens] = useState([]);
-  const [drawings, setDrawings] = useState([]);
-  const [fogDataUrl, setFogDataUrl] = useState(null);
+  const [error, setError] = useState('');
   const [tool, setTool] = useState('select');
   const [color, setColor] = useState('#ff0000');
   const [lineWidth, setLineWidth] = useState(3);
-  const [error, setError] = useState('');
-  const [brushSize, setBrushSize] = useState(40);
+  const [selectedNote, setSelectedNote] = useState(null);
 
   const canvasRef = useRef(null);
-  const fogCanvasRef = useRef(null);
   const containerRef = useRef(null);
   const isDrawing = useRef(false);
-  const startPos = useRef({ x: 0, y: 0 });
   const draggedToken = useRef(null);
   const dragOffset = useRef({ x: 0, y: 0 });
   const lastTouchTime = useRef(0);
+  const drawingsRef = useRef([]);
 
   const loadScene = useCallback(async () => {
     try {
@@ -34,13 +31,13 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         const s = data[0];
         setScene(s);
         setTokens(s.tokens || []);
-        setDrawings(s.drawings || []);
-        if (s.fog_of_war?.dataUrl) setFogDataUrl(s.fog_of_war.dataUrl);
-        else setFogDataUrl(null);
+        drawingsRef.current = s.drawings || [];
         if (s.background_url) setSelectedBg({ url: s.background_url, name: '' });
         else setSelectedBg(null);
+        redrawCanvas(s.drawings || []);
       } else {
-        setScene(null); setTokens([]); setDrawings([]); setFogDataUrl(null); setSelectedBg(null);
+        setScene(null); setTokens([]); drawingsRef.current = []; setSelectedBg(null);
+        clearCanvas();
       }
     } catch (e) { console.error(e); }
   }, [campaignId, sceneType]);
@@ -63,16 +60,43 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     return () => { socket.off('scene_updated', h1); socket.off('scene_token_moved', h2); };
   }, [campaignId, sceneType, socketRef]);
 
+  const clearCanvas = () => {
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    }
+  };
+
+  const redrawCanvas = (drawings) => {
+    if (!canvasRef.current || !selectedBg?.url) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const d of drawings) {
+      if (d.tool === 'pencil' && d.points?.length > 0) {
+        ctx.strokeStyle = d.color || '#ff0000';
+        ctx.lineWidth = d.lineWidth || 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(d.points[0].x, d.points[0].y);
+        for (let i = 1; i < d.points.length; i++) {
+          ctx.lineTo(d.points[i].x, d.points[i].y);
+        }
+        ctx.stroke();
+      }
+    }
+  };
+
   const saveScene = async () => {
     setError('');
     try {
-      const fog = fogCanvasRef.current ? fogCanvasRef.current.toDataURL() : null;
       await api.updateScene(campaignId, {
         scene_type: sceneType,
         background_url: selectedBg?.url || null,
         tokens,
-        drawings,
-        fog_of_war: fog ? { dataUrl: fog } : [],
+        drawings: drawingsRef.current,
+        fog_of_war: [],
       });
       if (socketRef?.current) {
         socketRef.current.emit('scene_update', { campaignId, sceneType, updates: {} });
@@ -80,7 +104,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     } catch (e) { setError(e.message); }
   };
 
-  // Инициализация холстов
+  // Инициализация холста при смене фона
   useEffect(() => {
     if (!selectedBg?.url) return;
     const img = new Image();
@@ -88,68 +112,29 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     img.onload = () => {
       const w = img.naturalWidth || 800;
       const h = img.naturalHeight || 600;
-
       if (canvasRef.current) {
         canvasRef.current.width = w;
         canvasRef.current.height = h;
-        const ctx = canvasRef.current.getContext('2d');
-        ctx.clearRect(0, 0, w, h);
-        for (const d of drawings) drawShape(ctx, d);
-      }
-      if (fogCanvasRef.current) {
-        fogCanvasRef.current.width = w;
-        fogCanvasRef.current.height = h;
-        const fctx = fogCanvasRef.current.getContext('2d');
-        if (fogDataUrl) {
-          const fogImg = new Image();
-          fogImg.onload = () => fctx.drawImage(fogImg, 0, 0);
-          fogImg.src = fogDataUrl;
-        } else {
-          fctx.fillStyle = 'rgba(0,0,0,0.85)';
-          fctx.fillRect(0, 0, w, h);
-        }
+        redrawCanvas(drawingsRef.current);
       }
     };
     img.src = selectedBg.url;
-  }, [selectedBg, fogDataUrl, drawings]);
+  }, [selectedBg]);
 
-  const drawShape = (ctx, d) => {
-    if (d.tool === 'pencil' || d.tool === 'line') {
-      ctx.strokeStyle = d.color;
-      ctx.lineWidth = d.lineWidth;
-      ctx.lineCap = 'round';
-      if (d.tool === 'line' && d.points?.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(d.points[0].x, d.points[0].y);
-        ctx.lineTo(d.points[1].x, d.points[1].y);
-        ctx.stroke();
-      }
-    } else if (d.tool === 'note') {
-      ctx.fillStyle = 'rgba(255,255,0,0.9)';
-      const tw = ctx.measureText(d.text || '').width + 10;
-      ctx.fillRect(d.x, d.y, tw, 20);
-      ctx.fillStyle = '#000';
-      ctx.font = '12px monospace';
-      ctx.fillText(d.text || '', d.x + 4, d.y + 14);
-    }
-  };
-
-  // Получить координаты из события (мышь или касание)
   const getEventPos = (e) => {
-    const canvas = tool === 'eraser' ? fogCanvasRef.current : canvasRef.current;
+    const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const scaleX = canvas.width / (rect.width || 1);
+    const scaleY = canvas.height / (rect.height || 1);
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
     };
   };
 
-  // Получить координаты для токена (относительно контейнера)
   const getTokenPos = (e) => {
     const container = containerRef.current;
     if (!container) return { x: 0, y: 0 };
@@ -157,62 +142,47 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const img = container.querySelector('img');
-    const scaleX = (img?.naturalWidth || 800) / rect.width;
-    const scaleY = (img?.naturalHeight || 600) / rect.height;
+    const scaleX = (img?.naturalWidth || 800) / (rect.width || 1);
+    const scaleY = (img?.naturalHeight || 600) / (rect.height || 1);
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
     };
   };
 
-  // Рисование (общее для мыши и тача)
+  // Рисование карандашом
+  const currentPath = useRef([]);
+
   const startDraw = (e) => {
     if (!isMaster) return;
-    if (tool === 'select') return;
+    if (tool !== 'pencil' && tool !== 'eraser') return;
     e.preventDefault();
 
     const pos = getEventPos(e);
     isDrawing.current = true;
-    startPos.current = pos;
+    currentPath.current = [{ x: pos.x, y: pos.y }];
 
-    if (tool === 'note') {
-      const text = prompt('Текст заметки:');
-      if (text) {
-        const d = { tool: 'note', x: pos.x, y: pos.y, text };
-        setDrawings(prev => [...prev, d]);
-      }
-      isDrawing.current = false;
-      return;
-    }
-
-    const canvas = tool === 'eraser' ? fogCanvasRef.current : canvasRef.current;
+    const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-
-    if (tool === 'pencil' || tool === 'line') {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(pos.x, pos.y);
-    }
-
-    if (tool === 'eraser') {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = brushSize;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(pos.x, pos.y);
-    }
+    ctx.strokeStyle = tool === 'eraser' ? '#000000' : color;
+    ctx.lineWidth = tool === 'eraser' ? lineWidth * 3 : lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
   };
 
   const moveDraw = (e) => {
     if (!isMaster || !isDrawing.current) return;
-    if (tool === 'select' || tool === 'note') return;
+    if (tool !== 'pencil' && tool !== 'eraser') return;
     e.preventDefault();
 
     const pos = getEventPos(e);
-    const canvas = tool === 'eraser' ? fogCanvasRef.current : canvasRef.current;
+    currentPath.current.push({ x: pos.x, y: pos.y });
+
+    const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.lineTo(pos.x, pos.y);
@@ -223,27 +193,58 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!isMaster || !isDrawing.current) return;
     isDrawing.current = false;
 
-    if (tool === 'line') {
-      const pos = getEventPos(e);
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.lineTo(pos.x, pos.y);
-      ctx.stroke();
-      setDrawings(prev => [...prev, {
-        tool: 'line', color, lineWidth,
-        points: [{ x: startPos.current.x, y: startPos.current.y }, { x: pos.x, y: pos.y }]
-      }]);
+    if (currentPath.current.length > 0 && tool === 'pencil') {
+      drawingsRef.current = [...drawingsRef.current, {
+        tool: 'pencil',
+        color,
+        lineWidth,
+        points: currentPath.current,
+      }];
     }
-    if (tool === 'pencil') {
-      setDrawings(prev => [...prev, { tool: 'pencil', color, lineWidth }]);
+
+    // Для ластика: удаляем рисунки, которые были задеты
+    if (tool === 'eraser' && currentPath.current.length > 0) {
+      const eraserPath = currentPath.current;
+      drawingsRef.current = drawingsRef.current.filter(d => {
+        if (d.tool !== 'pencil' || !d.points?.length) return true;
+        // Проверяем пересечение
+        return !d.points.some(p => {
+          return eraserPath.some(ep => {
+            const dx = p.x - ep.x;
+            const dy = p.y - ep.y;
+            return Math.sqrt(dx * dx + dy * dy) < (lineWidth * 3 + (d.lineWidth || 3));
+          });
+        });
+      });
+      redrawCanvas(drawingsRef.current);
     }
-    if (tool === 'eraser' && fogCanvasRef.current) {
-      fogCanvasRef.current.getContext('2d').globalCompositeOperation = 'source-over';
+
+    currentPath.current = [];
+    if (canvasRef.current) {
+      canvasRef.current.getContext('2d').globalCompositeOperation = 'source-over';
     }
   };
 
-  // Токены
+  // Заметки
+  const addNoteToken = (e) => {
+    if (!isMaster || tool !== 'note') return;
+    e.preventDefault();
+    const pos = getTokenPos(e);
+    const text = prompt('Текст заметки:');
+    if (text) {
+      setTokens(prev => [...prev, {
+        id: `note_${Date.now()}`,
+        type: 'note',
+        label: '📝',
+        color: '#ffcc00',
+        x: pos.x,
+        y: pos.y,
+        note: text,
+      }]);
+    }
+  };
+
+  // Токены персонажей/NPC
   const addToken = (type, refId, name, colorVal) => {
     if (!isMaster) return;
     const img = containerRef.current?.querySelector('img');
@@ -256,6 +257,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       color: colorVal,
       x: w * 0.3 + Math.random() * w * 0.4,
       y: h * 0.3 + Math.random() * h * 0.4,
+      note: null,
     }]);
   };
 
@@ -269,7 +271,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     e.stopPropagation();
     const now = Date.now();
     if (now - lastTouchTime.current < 300) {
-      // Двойное касание — удалить
       removeToken(tokenId);
       lastTouchTime.current = 0;
       return;
@@ -297,7 +298,8 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       const token = tokens.find(t => t.id === draggedToken.current);
       if (token) {
         socketRef.current.emit('scene_token_move', {
-          campaignId, sceneType, tokenId: token.id, tokens: tokens.map(t => t.id === token.id ? token : t)
+          campaignId, sceneType, tokenId: token.id,
+          tokens: tokens.map(t => t.id === token.id ? token : t)
         });
       }
     }
@@ -323,18 +325,14 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             <select value={tool} onChange={e => setTool(e.target.value)} className="bg-wasteland-700 text-wasteland-100 text-xs rounded p-1 border border-wasteland-600">
               <option value="select">✋</option>
               <option value="pencil">✏️</option>
-              <option value="line">📏</option>
               <option value="eraser">🧹</option>
               <option value="note">📝</option>
             </select>
-            {(tool === 'pencil' || tool === 'line') && (
+            {(tool === 'pencil' || tool === 'eraser') && (
               <>
-                <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-5 h-5 rounded cursor-pointer" />
+                {tool === 'pencil' && <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-5 h-5 rounded cursor-pointer" />}
                 <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" />
               </>
-            )}
-            {tool === 'eraser' && (
-              <input type="range" min="10" max="100" value={brushSize} onChange={e => setBrushSize(parseInt(e.target.value))} className="w-16" />
             )}
             <button onClick={saveScene} className="text-xs bg-accent-orange hover:bg-orange-500 text-wasteland-900 px-2 py-1 rounded font-bold">💾</button>
           </>
@@ -358,7 +356,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
           </div>
           <div className="flex flex-wrap gap-1">
             {backgrounds.map(bg => (
-              <div key={bg.id} onClick={() => { setSelectedBg(bg); setFogDataUrl(null); }} className={`cursor-pointer p-0.5 border rounded ${selectedBg?.url === bg.url ? 'border-accent-orange' : 'border-wasteland-600'}`}>
+              <div key={bg.id} onClick={() => setSelectedBg(bg)} className={`cursor-pointer p-0.5 border rounded ${selectedBg?.url === bg.url ? 'border-accent-orange' : 'border-wasteland-600'}`}>
                 <img src={bg.url} alt={bg.name} className="h-10 w-16 object-cover rounded" />
                 <p className="text-wasteland-500 text-xs text-center truncate w-16">{bg.name}</p>
               </div>
@@ -367,37 +365,41 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         </div>
       )}
 
-      {/* Холст сцены */}
+      {/* Холст */}
       <div
         ref={containerRef}
         className="flex-1 overflow-auto bg-wasteland-800"
         style={{ minHeight: '300px', touchAction: isMaster ? 'none' : 'auto' }}
-        onMouseDown={(e) => { startDraw(e); if (tool === 'select') startTokenDrag(e, null); }}
+        onMouseDown={(e) => { if (tool === 'note') addNoteToken(e); else startDraw(e); }}
         onMouseMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
         onMouseUp={(e) => { endDraw(e); endTokenDrag(); }}
         onMouseLeave={(e) => { endDraw(e); endTokenDrag(); }}
-        onTouchStart={(e) => { startDraw(e); }}
+        onTouchStart={(e) => { if (tool === 'note') addNoteToken(e); else startDraw(e); }}
         onTouchMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
         onTouchEnd={(e) => { endDraw(e); endTokenDrag(); }}
       >
         {selectedBg ? (
           <div className="relative inline-block min-w-full min-h-full">
             <img src={selectedBg.url} alt="Фон" className="block max-w-none" draggable={false} />
-            <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: ['pencil','line','note'].includes(tool) ? 'auto' : 'none' }} />
-            <canvas ref={fogCanvasRef} className="absolute top-0 left-0" style={{ pointerEvents: tool === 'eraser' ? 'auto' : 'none' }} />
+            <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: ['pencil','eraser'].includes(tool) ? 'auto' : 'none' }} />
+            {/* Токены */}
             {tokens.map(token => (
               <div
                 key={token.id}
                 onMouseDown={(e) => startTokenDrag(e, token.id)}
                 onTouchStart={(e) => startTokenDrag(e, token.id)}
+                onClick={() => { if (token.type === 'note' && token.note) setSelectedNote(token); }}
                 style={{
-                  position: 'absolute', left: token.x - 20, top: token.y - 20,
+                  position: 'absolute', left: token.x - 18, top: token.y - 18,
                   width: 36, height: 36, borderRadius: '50%',
                   backgroundColor: token.color,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 'bold', color: 'white', fontSize: '12px',
-                  border: '2px solid white', cursor: isMaster && tool === 'select' ? 'grab' : 'default',
-                  zIndex: 30, userSelect: 'none', boxShadow: '0 0 4px rgba(0,0,0,0.5)',
+                  fontWeight: 'bold', color: token.type === 'note' ? '#000' : 'white',
+                  fontSize: token.type === 'note' ? '16px' : '12px',
+                  border: '2px solid white',
+                  cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
+                  zIndex: 30, userSelect: 'none',
+                  boxShadow: '0 0 4px rgba(0,0,0,0.5)',
                   touchAction: 'none',
                 }}
               >
@@ -410,7 +412,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         )}
       </div>
 
-      {/* Токены */}
+      {/* Нижняя панель токенов */}
       {isMaster && (
         <div className="bg-wasteland-800 p-1.5 border-t border-wasteland-600 flex gap-1 overflow-x-auto">
           <span className="text-wasteland-500 text-xs self-center">+</span>
@@ -420,6 +422,31 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
               {t.name.substring(0, 8)}
             </button>
           ))}
+          <button onClick={() => setTokens([])} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-0.5 rounded text-accent-red flex-shrink-0">✕</button>
+        </div>
+      )}
+
+      {/* Модалка заметки */}
+      {selectedNote && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setSelectedNote(null)}>
+          <div className="bg-wasteland-800 border border-wasteland-600 rounded-lg p-4 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-accent-yellow font-bold">Заметка</h3>
+              <button onClick={() => setSelectedNote(null)} className="text-wasteland-400 hover:text-wasteland-200">✕</button>
+            </div>
+            <p className="text-wasteland-200 text-sm whitespace-pre-wrap">{selectedNote.note}</p>
+            {isMaster && (
+              <button
+                onClick={() => {
+                  removeToken(selectedNote.id);
+                  setSelectedNote(null);
+                }}
+                className="mt-3 text-xs bg-accent-red/20 hover:bg-accent-red/40 text-accent-red px-2 py-1 rounded"
+              >
+                Удалить
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
