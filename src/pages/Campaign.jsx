@@ -5,6 +5,7 @@ import { api } from '../api';
 import NPCPanel from '../components/NPCPanel';
 import InventoryPanel from '../components/InventoryPanel';
 import ScenePanel from '../components/ScenePanel';
+import MasterCharacterPanel from '../components/MasterCharacterPanel';
 
 const SOCKET_URL = 'https://apostol-api.onrender.com';
 
@@ -81,7 +82,7 @@ export default function Campaign({ user }) {
       const c = await api.getCampaign(id);
       setCampaign(c);
       const member = c.members?.find(m => m.user_id === user.id);
-      if (member?.character_id) {
+      if (member?.character_id && !isMaster) {
         const char = await api.getCharacter(member.character_id);
         setCharacter(char);
       }
@@ -179,7 +180,7 @@ export default function Campaign({ user }) {
   const tabs = [
     { key: 'chat', label: 'Чат' },
     { key: 'character', label: 'Перс' },
-    { key: 'inventory', label: 'Инв' },
+    ...(isMaster ? [] : [{ key: 'inventory', label: 'Инв' }]),
     { key: 'scene', label: 'Сцена' },
     ...(isMaster ? [{ key: 'npcs', label: 'NPC' }] : []),
   ];
@@ -203,7 +204,6 @@ export default function Campaign({ user }) {
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0">
-          {/* Вкладки */}
           <div className="bg-wasteland-800 border-b border-wasteland-600 flex overflow-x-auto">
             {tabs.map(tab => (
               <button
@@ -237,27 +237,33 @@ export default function Campaign({ user }) {
 
           {activeTab === 'character' && (
             <div className="flex-1 overflow-y-auto p-3">
-              {!character && !showCreateChar && (
-                <div className="text-center mt-8">
-                  <p className="text-wasteland-400 mb-4">У вас ещё нет персонажа</p>
-                  <button onClick={() => setShowCreateChar(true)} className="bg-accent-orange text-wasteland-900 font-bold px-6 py-3 rounded hover:bg-orange-500 transition">Создать персонажа</button>
-                </div>
-              )}
-              {showCreateChar && !character && (
-                <CharacterCreator professions={professions} perks={perks} campaignId={id} onCreated={(char) => { setCharacter(char); setShowCreateChar(false); }} onCancel={() => setShowCreateChar(false)} />
-              )}
-              {character && (
-                <CharacterSheet character={character} isMaster={isMaster} onUpdate={async (params) => { await api.updateCharacterParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} />
+              {isMaster ? (
+                <MasterCharacterPanel campaignId={id} />
+              ) : (
+                <>
+                  {!character && !showCreateChar && (
+                    <div className="text-center mt-8">
+                      <p className="text-wasteland-400 mb-4">У вас ещё нет персонажа</p>
+                      <button onClick={() => setShowCreateChar(true)} className="bg-accent-orange text-wasteland-900 font-bold px-6 py-3 rounded hover:bg-orange-500 transition">Создать персонажа</button>
+                    </div>
+                  )}
+                  {showCreateChar && !character && (
+                    <CharacterCreator professions={professions} perks={perks} campaignId={id} onCreated={(char) => { setCharacter(char); setShowCreateChar(false); }} onCancel={() => setShowCreateChar(false)} />
+                  )}
+                  {character && (
+                    <CharacterSheet character={character} isMaster={false} onUpdate={async (params) => { await api.updateCharacterParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} />
+                  )}
+                </>
               )}
             </div>
           )}
 
-          {activeTab === 'inventory' && character && (
+          {activeTab === 'inventory' && !isMaster && character && (
             <div className="flex-1 overflow-y-auto p-3">
               <InventoryPanel character={character} onRefresh={refreshCharacter} />
             </div>
           )}
-          {activeTab === 'inventory' && !character && (
+          {activeTab === 'inventory' && !isMaster && !character && (
             <div className="flex-1 overflow-y-auto p-3 text-center text-wasteland-400 mt-8">Сначала создайте персонажа</div>
           )}
 
@@ -439,7 +445,7 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
         {[{ label: 'Еда', field: 'food', color: '#33cc33' },{ label: 'Вода', field: 'water', color: '#3399ff' },{ label: 'Стресс', field: 'stress', color: '#cc3333' }].map(({ label, field, color }) => (
           <div key={field} className="mb-3">
             <div className="flex justify-between text-sm mb-1"><span className="text-wasteland-400">{label}</span><span className="text-wasteland-300">{params[field]}%</span></div>
-            <input type="range" min="0" max="100" value={params[field]} onChange={e => handleSlider(field, e.target.value)} disabled={!editMode} className="w-full h-2 rounded cursor-pointer" style={{ accentColor: color, opacity: editMode ? 1 : 0.7 }} />
+            <input type="range" min="0" max="100" value={params[field]} onChange={e => handleSlider(field, e.target.value)} disabled={!isMaster && !editMode} className="w-full h-2 rounded cursor-pointer" style={{ accentColor: color, opacity: isMaster || editMode ? 1 : 0.7 }} />
           </div>
         ))}
         {editMode && (
