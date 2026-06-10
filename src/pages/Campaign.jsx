@@ -55,20 +55,25 @@ export default function Campaign({ user }) {
     socket.emit('set_role', userRole || 'player');
 
     socket.on('dice_result', (data) => {
+      const msg = {
+        user: data.username,
+        text: `${data.skillName ? `[${data.skillName}] ` : ''}${data.formula} = ${data.sum}`,
+        time: new Date(data.time).toLocaleTimeString(),
+        isRoll: true,
+      };
       if (data.hidden) {
-        addMessage({
-          user: 'Скрытый',
-          text: `${data.username}: ${data.skillName ? `[${data.skillName}] ` : ''}${data.formula} = ${data.sum}`,
-          time: new Date(data.time).toLocaleTimeString(),
-        });
-      } else {
-        addMessage({
-          user: data.username,
-          text: `${data.skillName ? `[${data.skillName}] ` : ''}${data.formula} = ${data.sum}`,
-          time: new Date(data.time).toLocaleTimeString(),
-          isRoll: true,
-        });
+        msg.user = 'Скрытый';
       }
+      addMessage(msg);
+    });
+
+    socket.on('chat_message', (data) => {
+      addMessage({
+        user: data.username,
+        text: data.text,
+        time: new Date(data.created_at).toLocaleTimeString(),
+        isRoll: data.is_roll,
+      });
     });
 
     return () => {
@@ -101,6 +106,18 @@ export default function Campaign({ user }) {
       setProfessions(profs);
       const allPerks = await api.getPerks();
       setPerks(allPerks);
+
+      // Загружаем историю чата
+      try {
+        const history = await api.getChatMessages(id);
+        const formatted = history.map(m => ({
+          user: m.username,
+          text: m.text,
+          time: new Date(m.created_at).toLocaleTimeString(),
+          isRoll: m.is_roll,
+        }));
+        setMessages(formatted);
+      } catch (e) { console.error('Chat load error:', e); }
     } catch (e) {
       console.error(e);
       navigate('/dashboard');
@@ -116,14 +133,20 @@ export default function Campaign({ user }) {
     }
   };
 
-  const sendMessage = (e) => {
+  const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
-    addMessage({ user: user.username, text: input, time: new Date().toLocaleTimeString() });
+    const text = input.trim();
     setInput('');
+    try {
+      await api.sendChatMessage(id, text, false);
+    } catch (err) {
+      console.error('Send message error:', err);
+      addMessage({ user: user.username, text, time: new Date().toLocaleTimeString() });
+    }
   };
 
-  const rollDice = () => {
+  const rollDice = async () => {
     const match = input.match(/\/r\s+(\d+)d(\d+)(?:\s*\+\s*(\d+))?/i);
     if (!match) {
       addMessage({ user: 'Система', text: 'Формат: /r XdY + Z', time: new Date().toLocaleTimeString() });
@@ -134,28 +157,41 @@ export default function Campaign({ user }) {
     const mod = parseInt(match[3] || '0');
     const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1);
     const sum = rolls.reduce((a, b) => a + b, 0) + mod;
+    const formula = `${count}d${sides}${mod ? ' + ' + mod : ''} = ${sum}`;
+
+    setInput('');
+
+    // Сохраняем в БД
+    try {
+      await api.sendChatMessage(id, `🎲 ${formula}`, true);
+    } catch (e) { console.error(e); }
+
     if (socketRef.current && campaign) {
       socketRef.current.emit('dice_roll', {
         campaignId: id,
         userId: user.id,
         username: user.username,
-        formula: `${count}d${sides}${mod ? ' + ' + mod : ''} = ${sum}`,
+        formula,
         sum,
         hidden: hiddenMode && isMaster,
       });
     }
-    setInput('');
   };
 
   const rollSkill = async (skillName) => {
     if (!character) return;
     try {
       const result = await api.diceAuto(character.id, skillName);
+      // Сохраняем в БД
+      try {
+        await api.sendChatMessage(id, `🎲 [${skillName}] ${result.formula}`, true);
+      } catch (e) { console.error(e); }
+
       if (socketRef.current && campaign) {
         socketRef.current.emit('dice_roll', {
           campaignId: id,
           userId: user.id,
-          username: user.username,
+          username: character.name,
           skillName,
           formula: result.formula,
           sum: result.sum,
@@ -186,8 +222,8 @@ export default function Campaign({ user }) {
   ];
 
   return (
-    <div className="min-h-screen bg-wasteland-900 flex flex-col">
-      <header className="bg-wasteland-800 border-b border-wasteland-600 p-2 md:p-3 flex items-center justify-between">
+    <div className="h-screen bg-wasteland-900 flex flex-col overflow-hidden">
+      <header className="bg-wasteland-800 border-b border-wasteland-600 p-2 md:p-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate('/dashboard')} className="text-wasteland-400 hover:text-wasteland-200 text-sm">←</button>
           <h1 className="text-base md:text-xl font-stylized text-accent-orange truncate max-w-[120px] md:max-w-none">{campaign.title}</h1>
@@ -202,9 +238,9 @@ export default function Campaign({ user }) {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="bg-wasteland-800 border-b border-wasteland-600 flex overflow-x-auto">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="bg-wasteland-800 border-b border-wasteland-600 flex overflow-x-auto flex-shrink-0">
             {tabs.map(tab => (
               <button
                 key={tab.key}
@@ -217,8 +253,8 @@ export default function Campaign({ user }) {
           </div>
 
           {activeTab === 'chat' && (
-            <>
-              <div ref={chatRef} className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div ref={chatRef} className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
                 {messages.length === 0 && <p className="text-wasteland-500 text-center mt-8 text-sm">Чат пуст. /r 2d10 + 3 для броска</p>}
                 {messages.map((m, i) => (
                   <div key={i} className={`text-sm ${m.isRoll ? 'bg-wasteland-800/50 p-1.5 rounded border border-wasteland-700' : ''}`}>
@@ -228,15 +264,15 @@ export default function Campaign({ user }) {
                   </div>
                 ))}
               </div>
-              <form onSubmit={sendMessage} onKeyDown={handleKeyDown} className="p-2 bg-wasteland-800 border-t border-wasteland-600 flex gap-2">
+              <form onSubmit={sendMessage} onKeyDown={handleKeyDown} className="p-2 bg-wasteland-800 border-t border-wasteland-600 flex gap-2 flex-shrink-0">
                 <input className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 placeholder-wasteland-500 text-sm" placeholder="Сообщение или /r 2d10 + 3" value={input} onChange={e => setInput(e.target.value)} />
-                <button type="submit" className="bg-wasteland-600 text-wasteland-100 px-3 py-2 rounded text-sm hover:bg-wasteland-500 transition">→</button>
+                <button type="submit" className="bg-wasteland-600 text-wasteland-100 px-3 py-2 rounded text-sm hover:bg-wasteland-500 transition flex-shrink-0">→</button>
               </form>
-            </>
+            </div>
           )}
 
           {activeTab === 'character' && (
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
               {isMaster ? (
                 <MasterCharacterPanel campaignId={id} />
               ) : (
@@ -259,28 +295,28 @@ export default function Campaign({ user }) {
           )}
 
           {activeTab === 'inventory' && !isMaster && character && (
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
               <InventoryPanel character={character} onRefresh={refreshCharacter} />
             </div>
           )}
           {activeTab === 'inventory' && !isMaster && !character && (
-            <div className="flex-1 overflow-y-auto p-3 text-center text-wasteland-400 mt-8">Сначала создайте персонажа</div>
+            <div className="flex-1 overflow-y-auto p-3 text-center text-wasteland-400 mt-8 min-h-0">Сначала создайте персонажа</div>
           )}
 
           {activeTab === 'scene' && (
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden min-h-0">
               <ScenePanel campaignId={id} isMaster={isMaster} socketRef={socketRef} npcs={npcs} characters={allCharacters} />
             </div>
           )}
 
           {activeTab === 'npcs' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
               <NPCPanel campaignId={id} socketRef={socketRef} />
             </div>
           )}
         </div>
 
-        <div className="hidden md:block w-64 bg-wasteland-800 border-l border-wasteland-600 p-3 overflow-y-auto">
+        <div className="hidden md:block w-64 bg-wasteland-800 border-l border-wasteland-600 p-3 overflow-y-auto flex-shrink-0">
           <h2 className="text-lg font-stylized mb-3 text-wasteland-300">Группа</h2>
           {campaign.members?.map(m => (
             <div key={m.user_id} className="text-sm py-1.5 px-2 rounded mb-1 bg-wasteland-700/50">
