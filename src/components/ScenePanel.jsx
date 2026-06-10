@@ -17,14 +17,15 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const [lineWidth, setLineWidth] = useState(3);
   const [error, setError] = useState('');
   const [brushSize, setBrushSize] = useState(40);
-  const [noteText, setNoteText] = useState('');
 
   const canvasRef = useRef(null);
   const fogCanvasRef = useRef(null);
+  const containerRef = useRef(null);
   const isDrawing = useRef(false);
   const startPos = useRef({ x: 0, y: 0 });
   const draggedToken = useRef(null);
   const dragOffset = useRef({ x: 0, y: 0 });
+  const lastTouchTime = useRef(0);
 
   const loadScene = useCallback(async () => {
     try {
@@ -54,22 +55,18 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!socketRef?.current) return;
     const socket = socketRef.current;
     const h1 = (data) => { if (data.campaignId === campaignId && data.sceneType === sceneType) loadScene(); };
-    const h2 = (data) => { if (data.campaignId === campaignId && data.sceneType === sceneType) setTokens(data.tokens); };
+    const h2 = (data) => {
+      if (data.campaignId === campaignId && data.sceneType === sceneType && data.tokens) setTokens(data.tokens);
+    };
     socket.on('scene_updated', h1);
     socket.on('scene_token_moved', h2);
     return () => { socket.off('scene_updated', h1); socket.off('scene_token_moved', h2); };
   }, [campaignId, sceneType, socketRef]);
 
-  // Сохраняем туман войны как dataUrl
-  const getFogDataUrl = () => {
-    if (!fogCanvasRef.current) return null;
-    return fogCanvasRef.current.toDataURL();
-  };
-
   const saveScene = async () => {
     setError('');
     try {
-      const fog = getFogDataUrl();
+      const fog = fogCanvasRef.current ? fogCanvasRef.current.toDataURL() : null;
       await api.updateScene(campaignId, {
         scene_type: sceneType,
         background_url: selectedBg?.url || null,
@@ -83,76 +80,98 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     } catch (e) { setError(e.message); }
   };
 
-  // Инициализация холстов при смене фона
+  // Инициализация холстов
   useEffect(() => {
     if (!selectedBg?.url) return;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      // Холст рисования
+      const w = img.naturalWidth || 800;
+      const h = img.naturalHeight || 600;
+
       if (canvasRef.current) {
-        const c = canvasRef.current;
-        c.width = img.naturalWidth || 800;
-        c.height = img.naturalHeight || 600;
-        const ctx = c.getContext('2d');
-        ctx.clearRect(0, 0, c.width, c.height);
-        // Восстанавливаем рисунки
-        for (const d of drawings) {
-          if (d.tool === 'pencil' || d.tool === 'line') {
-            ctx.strokeStyle = d.color;
-            ctx.lineWidth = d.lineWidth;
-            if (d.tool === 'line' && d.points?.length >= 2) {
-              ctx.beginPath();
-              ctx.moveTo(d.points[0].x, d.points[0].y);
-              ctx.lineTo(d.points[1].x, d.points[1].y);
-              ctx.stroke();
-            }
-          } else if (d.tool === 'note') {
-            ctx.fillStyle = 'rgba(255,255,0,0.9)';
-            ctx.fillRect(d.x, d.y, ctx.measureText(d.text).width + 10, 20);
-            ctx.fillStyle = '#000';
-            ctx.font = '12px monospace';
-            ctx.fillText(d.text, d.x + 4, d.y + 14);
-          }
-        }
+        canvasRef.current.width = w;
+        canvasRef.current.height = h;
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
+        for (const d of drawings) drawShape(ctx, d);
       }
-      // Холст тумана
       if (fogCanvasRef.current) {
-        const fc = fogCanvasRef.current;
-        fc.width = img.naturalWidth || 800;
-        fc.height = img.naturalHeight || 600;
-        const fctx = fc.getContext('2d');
+        fogCanvasRef.current.width = w;
+        fogCanvasRef.current.height = h;
+        const fctx = fogCanvasRef.current.getContext('2d');
         if (fogDataUrl) {
           const fogImg = new Image();
-          fogImg.onload = () => { fctx.drawImage(fogImg, 0, 0); };
+          fogImg.onload = () => fctx.drawImage(fogImg, 0, 0);
           fogImg.src = fogDataUrl;
         } else {
           fctx.fillStyle = 'rgba(0,0,0,0.85)';
-          fctx.fillRect(0, 0, fc.width, fc.height);
+          fctx.fillRect(0, 0, w, h);
         }
       }
     };
     img.src = selectedBg.url;
   }, [selectedBg, fogDataUrl, drawings]);
 
-  // Рисование
-  const getCanvasPos = (e) => {
+  const drawShape = (ctx, d) => {
+    if (d.tool === 'pencil' || d.tool === 'line') {
+      ctx.strokeStyle = d.color;
+      ctx.lineWidth = d.lineWidth;
+      ctx.lineCap = 'round';
+      if (d.tool === 'line' && d.points?.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(d.points[0].x, d.points[0].y);
+        ctx.lineTo(d.points[1].x, d.points[1].y);
+        ctx.stroke();
+      }
+    } else if (d.tool === 'note') {
+      ctx.fillStyle = 'rgba(255,255,0,0.9)';
+      const tw = ctx.measureText(d.text || '').width + 10;
+      ctx.fillRect(d.x, d.y, tw, 20);
+      ctx.fillStyle = '#000';
+      ctx.font = '12px monospace';
+      ctx.fillText(d.text || '', d.x + 4, d.y + 14);
+    }
+  };
+
+  // Получить координаты из события (мышь или касание)
+  const getEventPos = (e) => {
     const canvas = tool === 'eraser' ? fogCanvasRef.current : canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
     };
   };
 
-  const handleMouseDown = (e) => {
+  // Получить координаты для токена (относительно контейнера)
+  const getTokenPos = (e) => {
+    const container = containerRef.current;
+    if (!container) return { x: 0, y: 0 };
+    const rect = container.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const img = container.querySelector('img');
+    const scaleX = (img?.naturalWidth || 800) / rect.width;
+    const scaleY = (img?.naturalHeight || 600) / rect.height;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  };
+
+  // Рисование (общее для мыши и тача)
+  const startDraw = (e) => {
     if (!isMaster) return;
     if (tool === 'select') return;
+    e.preventDefault();
 
-    const pos = getCanvasPos(e);
+    const pos = getEventPos(e);
     isDrawing.current = true;
     startPos.current = pos;
 
@@ -166,10 +185,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       return;
     }
 
+    const canvas = tool === 'eraser' ? fogCanvasRef.current : canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
     if (tool === 'pencil' || tool === 'line') {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
       ctx.strokeStyle = color;
       ctx.lineWidth = lineWidth;
       ctx.lineCap = 'round';
@@ -178,9 +198,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
 
     if (tool === 'eraser') {
-      const canvas = fogCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
       ctx.globalCompositeOperation = 'destination-out';
       ctx.lineWidth = brushSize;
       ctx.lineCap = 'round';
@@ -189,11 +206,12 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  const handleMouseMove = (e) => {
+  const moveDraw = (e) => {
     if (!isMaster || !isDrawing.current) return;
     if (tool === 'select' || tool === 'note') return;
+    e.preventDefault();
 
-    const pos = getCanvasPos(e);
+    const pos = getEventPos(e);
     const canvas = tool === 'eraser' ? fogCanvasRef.current : canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -201,12 +219,12 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     ctx.stroke();
   };
 
-  const handleMouseUp = (e) => {
+  const endDraw = (e) => {
     if (!isMaster || !isDrawing.current) return;
     isDrawing.current = false;
 
     if (tool === 'line') {
-      const pos = getCanvasPos(e);
+      const pos = getEventPos(e);
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -217,12 +235,9 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         points: [{ x: startPos.current.x, y: startPos.current.y }, { x: pos.x, y: pos.y }]
       }]);
     }
-
     if (tool === 'pencil') {
       setDrawings(prev => [...prev, { tool: 'pencil', color, lineWidth }]);
     }
-
-    // Очищаем операцию ластика
     if (tool === 'eraser' && fogCanvasRef.current) {
       fogCanvasRef.current.getContext('2d').globalCompositeOperation = 'source-over';
     }
@@ -231,7 +246,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   // Токены
   const addToken = (type, refId, name, colorVal) => {
     if (!isMaster) return;
-    const img = canvasRef.current?.parentElement?.querySelector('img');
+    const img = containerRef.current?.querySelector('img');
     const w = img?.naturalWidth || 800;
     const h = img?.naturalHeight || 600;
     setTokens(prev => [...prev, {
@@ -248,35 +263,36 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     setTokens(prev => prev.filter(t => t.id !== tokenId));
   };
 
-  const handleTokenDragStart = (e, tokenId) => {
+  const startTokenDrag = (e, tokenId) => {
     if (!isMaster || tool !== 'select') return;
     e.preventDefault();
+    e.stopPropagation();
+    const now = Date.now();
+    if (now - lastTouchTime.current < 300) {
+      // Двойное касание — удалить
+      removeToken(tokenId);
+      lastTouchTime.current = 0;
+      return;
+    }
+    lastTouchTime.current = now;
     draggedToken.current = tokenId;
-    const img = canvasRef.current?.parentElement?.querySelector('img');
-    const rect = img?.parentElement?.getBoundingClientRect();
-    const scaleX = (img?.naturalWidth || 800) / (rect?.width || 800);
-    const scaleY = (img?.naturalHeight || 600) / (rect?.height || 600);
+    const pos = getTokenPos(e);
     const token = tokens.find(t => t.id === tokenId);
     if (token) {
-      dragOffset.current = {
-        x: e.clientX * scaleX - token.x,
-        y: e.clientY * scaleY - token.y,
-      };
+      dragOffset.current = { x: pos.x - token.x, y: pos.y - token.y };
     }
   };
 
-  const handleTokenDragMove = (e) => {
+  const moveTokenDrag = (e) => {
     if (!draggedToken.current || !isMaster) return;
-    const img = canvasRef.current?.parentElement?.querySelector('img');
-    const rect = img?.parentElement?.getBoundingClientRect();
-    const scaleX = (img?.naturalWidth || 800) / (rect?.width || 800);
-    const scaleY = (img?.naturalHeight || 600) / (rect?.height || 600);
-    const x = e.clientX * scaleX - dragOffset.current.x;
-    const y = e.clientY * scaleY - dragOffset.current.y;
-    setTokens(prev => prev.map(t => t.id === draggedToken.current ? { ...t, x, y } : t));
+    e.preventDefault();
+    const pos = getTokenPos(e);
+    setTokens(prev => prev.map(t =>
+      t.id === draggedToken.current ? { ...t, x: pos.x - dragOffset.current.x, y: pos.y - dragOffset.current.y } : t
+    ));
   };
 
-  const handleTokenDragEnd = () => {
+  const endTokenDrag = () => {
     if (draggedToken.current && socketRef?.current) {
       const token = tokens.find(t => t.id === draggedToken.current);
       if (token) {
@@ -296,42 +312,42 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   return (
     <div className="flex flex-col h-full bg-wasteland-900">
       {/* Панель инструментов */}
-      <div className="flex items-center gap-2 p-2 bg-wasteland-800 border-b border-wasteland-600 flex-wrap">
-        <select value={sceneType} onChange={e => { setSceneType(e.target.value); }} className="bg-wasteland-700 text-wasteland-100 text-sm rounded p-1 border border-wasteland-600">
-          <option value="local">Локальная сцена</option>
-          <option value="global">Глобальная карта</option>
+      <div className="flex items-center gap-1 p-1.5 bg-wasteland-800 border-b border-wasteland-600 flex-wrap">
+        <select value={sceneType} onChange={e => setSceneType(e.target.value)} className="bg-wasteland-700 text-wasteland-100 text-xs rounded p-1 border border-wasteland-600">
+          <option value="local">Локальная</option>
+          <option value="global">Глобальная</option>
         </select>
         {isMaster && (
           <>
-            <button onClick={() => setShowBgLibrary(!showBgLibrary)} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300">🖼️ Фон</button>
-            <select value={tool} onChange={e => setTool(e.target.value)} className="bg-wasteland-700 text-wasteland-100 text-sm rounded p-1 border border-wasteland-600">
-              <option value="select">Выбор</option>
-              <option value="pencil">Карандаш</option>
-              <option value="line">Линейка</option>
-              <option value="eraser">Ластик</option>
-              <option value="note">Заметка</option>
+            <button onClick={() => setShowBgLibrary(!showBgLibrary)} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300">🖼️</button>
+            <select value={tool} onChange={e => setTool(e.target.value)} className="bg-wasteland-700 text-wasteland-100 text-xs rounded p-1 border border-wasteland-600">
+              <option value="select">✋</option>
+              <option value="pencil">✏️</option>
+              <option value="line">📏</option>
+              <option value="eraser">🧹</option>
+              <option value="note">📝</option>
             </select>
             {(tool === 'pencil' || tool === 'line') && (
               <>
-                <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-6 h-6 rounded cursor-pointer" />
-                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-16" />
+                <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-5 h-5 rounded cursor-pointer" />
+                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" />
               </>
             )}
             {tool === 'eraser' && (
-              <input type="range" min="10" max="100" value={brushSize} onChange={e => setBrushSize(parseInt(e.target.value))} className="w-24" />
+              <input type="range" min="10" max="100" value={brushSize} onChange={e => setBrushSize(parseInt(e.target.value))} className="w-16" />
             )}
-            <button onClick={saveScene} className="text-xs bg-accent-orange hover:bg-orange-500 text-wasteland-900 px-2 py-1 rounded font-bold">Сохранить</button>
+            <button onClick={saveScene} className="text-xs bg-accent-orange hover:bg-orange-500 text-wasteland-900 px-2 py-1 rounded font-bold">💾</button>
           </>
         )}
-        {error && <span className="text-accent-red text-xs">{error}</span>}
+        {error && <span className="text-accent-red text-xs ml-1">{error}</span>}
       </div>
 
       {/* Библиотека фонов */}
       {showBgLibrary && isMaster && (
         <div className="bg-wasteland-800 p-2 border-b border-wasteland-600">
-          <div className="flex gap-2 mb-2">
-            <input placeholder="Название" value={bgNameInput} onChange={e => setBgNameInput(e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm" />
-            <input placeholder="URL картинки" value={bgUrlInput} onChange={e => setBgUrlInput(e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm" />
+          <div className="flex flex-col sm:flex-row gap-1 mb-2">
+            <input placeholder="Название" value={bgNameInput} onChange={e => setBgNameInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
+            <input placeholder="URL картинки" value={bgUrlInput} onChange={e => setBgUrlInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
             <button onClick={async () => {
               if (bgNameInput && bgUrlInput) {
                 await api.uploadBackground(campaignId, bgNameInput, bgUrlInput);
@@ -340,11 +356,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
               }
             }} className="bg-accent-orange text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1">
             {backgrounds.map(bg => (
-              <div key={bg.id} onClick={() => { setSelectedBg(bg); setFogDataUrl(null); }} className={`cursor-pointer p-1 border rounded ${selectedBg?.url === bg.url ? 'border-accent-orange' : 'border-wasteland-600'}`}>
-                <img src={bg.url} alt={bg.name} className="h-12 w-20 object-cover rounded" />
-                <p className="text-wasteland-400 text-xs text-center">{bg.name}</p>
+              <div key={bg.id} onClick={() => { setSelectedBg(bg); setFogDataUrl(null); }} className={`cursor-pointer p-0.5 border rounded ${selectedBg?.url === bg.url ? 'border-accent-orange' : 'border-wasteland-600'}`}>
+                <img src={bg.url} alt={bg.name} className="h-10 w-16 object-cover rounded" />
+                <p className="text-wasteland-500 text-xs text-center truncate w-16">{bg.name}</p>
               </div>
             ))}
           </div>
@@ -353,58 +369,57 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
       {/* Холст сцены */}
       <div
-        className="flex-1 relative overflow-auto bg-wasteland-800"
-        style={{ minHeight: '400px' }}
-        onMouseMove={(e) => { handleMouseMove(e); handleTokenDragMove(e); }}
-        onMouseUp={(e) => { handleMouseUp(e); handleTokenDragEnd(); }}
-        onMouseLeave={(e) => { handleMouseUp(e); handleTokenDragEnd(); }}
+        ref={containerRef}
+        className="flex-1 overflow-auto bg-wasteland-800"
+        style={{ minHeight: '300px', touchAction: isMaster ? 'none' : 'auto' }}
+        onMouseDown={(e) => { startDraw(e); if (tool === 'select') startTokenDrag(e, null); }}
+        onMouseMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
+        onMouseUp={(e) => { endDraw(e); endTokenDrag(); }}
+        onMouseLeave={(e) => { endDraw(e); endTokenDrag(); }}
+        onTouchStart={(e) => { startDraw(e); }}
+        onTouchMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
+        onTouchEnd={(e) => { endDraw(e); endTokenDrag(); }}
       >
         {selectedBg ? (
           <div className="relative inline-block min-w-full min-h-full">
             <img src={selectedBg.url} alt="Фон" className="block max-w-none" draggable={false} />
-            <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: ['pencil','line','note'].includes(tool) ? 'auto' : 'none' }} onMouseDown={handleMouseDown} />
-            <canvas ref={fogCanvasRef} className="absolute top-0 left-0" style={{ pointerEvents: tool === 'eraser' ? 'auto' : 'none' }} onMouseDown={handleMouseDown} />
+            <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: ['pencil','line','note'].includes(tool) ? 'auto' : 'none' }} />
+            <canvas ref={fogCanvasRef} className="absolute top-0 left-0" style={{ pointerEvents: tool === 'eraser' ? 'auto' : 'none' }} />
             {tokens.map(token => (
               <div
                 key={token.id}
-                onMouseDown={(e) => handleTokenDragStart(e, token.id)}
+                onMouseDown={(e) => startTokenDrag(e, token.id)}
+                onTouchStart={(e) => startTokenDrag(e, token.id)}
                 style={{
                   position: 'absolute', left: token.x - 20, top: token.y - 20,
-                  width: 40, height: 40, borderRadius: '50%',
+                  width: 36, height: 36, borderRadius: '50%',
                   backgroundColor: token.color,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 'bold', color: 'white', fontSize: '14px',
+                  fontWeight: 'bold', color: 'white', fontSize: '12px',
                   border: '2px solid white', cursor: isMaster && tool === 'select' ? 'grab' : 'default',
                   zIndex: 30, userSelect: 'none', boxShadow: '0 0 4px rgba(0,0,0,0.5)',
+                  touchAction: 'none',
                 }}
               >
                 {token.label}
-                {isMaster && tool === 'select' && (
-                  <button
-                    onClick={(ev) => { ev.stopPropagation(); removeToken(token.id); }}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-accent-red rounded-full text-white text-xs flex items-center justify-center"
-                  >×</button>
-                )}
               </div>
             ))}
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-wasteland-500">Выберите фон для сцены</div>
+          <div className="flex items-center justify-center h-full text-wasteland-500 text-sm">Выберите фон</div>
         )}
       </div>
 
       {/* Токены */}
       {isMaster && (
-        <div className="bg-wasteland-800 p-2 border-t border-wasteland-600 flex gap-2 overflow-x-auto">
-          <span className="text-wasteland-400 text-xs self-center">Токены:</span>
+        <div className="bg-wasteland-800 p-1.5 border-t border-wasteland-600 flex gap-1 overflow-x-auto">
+          <span className="text-wasteland-500 text-xs self-center">+</span>
           {availableTokens.map(t => (
-            <button key={`${t.type}_${t.id}`} onClick={() => addToken(t.type, t.id, t.name, t.color)} className="flex items-center gap-1 bg-wasteland-700 hover:bg-wasteland-600 rounded px-2 py-1 text-xs">
-              <span className="w-4 h-4 rounded-full" style={{ backgroundColor: t.color }}></span>
-              {t.name}
+            <button key={`${t.type}_${t.id}`} onClick={() => addToken(t.type, t.id, t.name, t.color)} className="flex items-center gap-1 bg-wasteland-700 hover:bg-wasteland-600 rounded px-1.5 py-0.5 text-xs flex-shrink-0">
+              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }}></span>
+              {t.name.substring(0, 8)}
             </button>
           ))}
-          <button onClick={() => availableTokens.forEach(t => addToken(t.type, t.id, t.name, t.color))} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded">+ Все</button>
-          <button onClick={() => setTokens([])} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-1 rounded text-accent-red">Очистить</button>
         </div>
       )}
     </div>
