@@ -176,38 +176,49 @@ export default function Campaign({ user }) {
   if (loading) return <div className="min-h-screen bg-wasteland-900 flex items-center justify-center"><p className="text-wasteland-300 font-stylized">Загрузка...</p></div>;
   if (!campaign) return null;
 
+  const tabs = [
+    { key: 'chat', label: 'Чат' },
+    { key: 'character', label: 'Перс' },
+    { key: 'inventory', label: 'Инв' },
+    { key: 'scene', label: 'Сцена' },
+    ...(isMaster ? [{ key: 'npcs', label: 'NPC' }] : []),
+  ];
+
   return (
     <div className="min-h-screen bg-wasteland-900 flex flex-col">
-      <header className="bg-wasteland-800 border-b border-wasteland-600 p-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/dashboard')} className="text-wasteland-400 hover:text-wasteland-200">←</button>
-          <h1 className="text-xl font-stylized text-accent-orange">{campaign.title}</h1>
+      <header className="bg-wasteland-800 border-b border-wasteland-600 p-2 md:p-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate('/dashboard')} className="text-wasteland-400 hover:text-wasteland-200 text-sm">←</button>
+          <h1 className="text-base md:text-xl font-stylized text-accent-orange truncate max-w-[120px] md:max-w-none">{campaign.title}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {isMaster && (
-            <button onClick={() => setHiddenMode(!hiddenMode)} className={`text-xs px-2 py-1 rounded ${hiddenMode ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>
-              {hiddenMode ? 'Скрытый' : 'Открытый'}
+            <button onClick={() => setHiddenMode(!hiddenMode)} className={`text-xs px-2 py-0.5 rounded ${hiddenMode ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>
+              {hiddenMode ? '🔒' : '👁'}
             </button>
           )}
-          <span className="text-wasteland-400 text-xs">Код: {campaign.invite_code}</span>
+          <span className="text-wasteland-500 text-xs hidden sm:inline">Код: {campaign.invite_code}</span>
         </div>
       </header>
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="bg-wasteland-800 border-b border-wasteland-600 flex">
-            <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 text-sm ${activeTab === 'chat' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Чат</button>
-            <button onClick={() => setActiveTab('character')} className={`px-4 py-2 text-sm ${activeTab === 'character' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Персонаж</button>
-            <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 text-sm ${activeTab === 'inventory' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Инвентарь</button>
-            <button onClick={() => setActiveTab('scene')} className={`px-4 py-2 text-sm ${activeTab === 'scene' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>Сцена</button>
-            {isMaster && (
-              <button onClick={() => setActiveTab('npcs')} className={`px-4 py-2 text-sm ${activeTab === 'npcs' ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>NPC</button>
-            )}
+          {/* Вкладки */}
+          <div className="bg-wasteland-800 border-b border-wasteland-600 flex overflow-x-auto">
+            {tabs.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-shrink-0 px-3 py-2 text-xs md:text-sm md:px-4 ${activeTab === tab.key ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           {activeTab === 'chat' && (
             <>
-              <div ref={chatRef} className="flex-1 overflow-y-auto p-4 space-y-2">
+              <div ref={chatRef} className="flex-1 overflow-y-auto p-3 space-y-2">
                 {messages.length === 0 && <p className="text-wasteland-500 text-center mt-8 text-sm">Чат пуст. /r 2d10 + 3 для броска</p>}
                 {messages.map((m, i) => (
                   <div key={i} className={`text-sm ${m.isRoll ? 'bg-wasteland-800/50 p-1.5 rounded border border-wasteland-700' : ''}`}>
@@ -217,15 +228,15 @@ export default function Campaign({ user }) {
                   </div>
                 ))}
               </div>
-              <form onSubmit={sendMessage} onKeyDown={handleKeyDown} className="p-3 bg-wasteland-800 border-t border-wasteland-600 flex gap-2">
+              <form onSubmit={sendMessage} onKeyDown={handleKeyDown} className="p-2 bg-wasteland-800 border-t border-wasteland-600 flex gap-2">
                 <input className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 placeholder-wasteland-500 text-sm" placeholder="Сообщение или /r 2d10 + 3" value={input} onChange={e => setInput(e.target.value)} />
-                <button type="submit" className="bg-wasteland-600 text-wasteland-100 px-4 py-2 rounded text-sm hover:bg-wasteland-500 transition">→</button>
+                <button type="submit" className="bg-wasteland-600 text-wasteland-100 px-3 py-2 rounded text-sm hover:bg-wasteland-500 transition">→</button>
               </form>
             </>
           )}
 
           {activeTab === 'character' && (
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-3">
               {!character && !showCreateChar && (
                 <div className="text-center mt-8">
                   <p className="text-wasteland-400 mb-4">У вас ещё нет персонажа</p>
@@ -242,12 +253,12 @@ export default function Campaign({ user }) {
           )}
 
           {activeTab === 'inventory' && character && (
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-3">
               <InventoryPanel character={character} onRefresh={refreshCharacter} />
             </div>
           )}
           {activeTab === 'inventory' && !character && (
-            <div className="flex-1 overflow-y-auto p-4 text-center text-wasteland-400 mt-8">Сначала создайте персонажа</div>
+            <div className="flex-1 overflow-y-auto p-3 text-center text-wasteland-400 mt-8">Сначала создайте персонажа</div>
           )}
 
           {activeTab === 'scene' && (
@@ -257,13 +268,13 @@ export default function Campaign({ user }) {
           )}
 
           {activeTab === 'npcs' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-3">
               <NPCPanel campaignId={id} socketRef={socketRef} />
             </div>
           )}
         </div>
 
-        <div className="w-full md:w-72 bg-wasteland-800 border-l border-wasteland-600 p-3 overflow-y-auto">
+        <div className="hidden md:block w-64 bg-wasteland-800 border-l border-wasteland-600 p-3 overflow-y-auto">
           <h2 className="text-lg font-stylized mb-3 text-wasteland-300">Группа</h2>
           {campaign.members?.map(m => (
             <div key={m.user_id} className="text-sm py-1.5 px-2 rounded mb-1 bg-wasteland-700/50">
