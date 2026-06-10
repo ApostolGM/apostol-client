@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 
 export default function MasterCharacterPanel({ campaignId }) {
@@ -27,8 +27,8 @@ export default function MasterCharacterPanel({ campaignId }) {
   };
 
   const handleParamChange = async (charId, field, value) => {
-    await api.updateCharacterParams(charId, { [field]: value });
     setCharacters(prev => prev.map(c => c.id === charId ? { ...c, [field]: value } : c));
+    await api.updateCharacterParams(charId, { [field]: value });
   };
 
   if (loading) return <p className="text-wasteland-400 text-center py-4">Загрузка...</p>;
@@ -61,16 +61,13 @@ export default function MasterCharacterPanel({ campaignId }) {
                   { label: 'Вода', field: 'water', value: char.water ?? 100, color: '#3399ff' },
                   { label: 'Стресс', field: 'stress', value: char.stress ?? 0, color: '#cc3333' },
                 ].map(({ label, field, value, color }) => (
-                  <div key={field} className="flex items-center gap-2 mb-1">
-                    <span className="text-wasteland-400 text-xs w-12">{label}</span>
-                    <input
-                      type="range" min="0" max="100" value={value}
-                      onChange={e => handleParamChange(char.id, field, parseInt(e.target.value))}
-                      className="flex-1 h-1.5 rounded cursor-pointer"
-                      style={{ accentColor: color }}
-                    />
-                    <span className="text-wasteland-300 text-xs w-8">{value}%</span>
-                  </div>
+                  <SliderRow
+                    key={field}
+                    label={label}
+                    value={value}
+                    color={color}
+                    onChange={(v) => handleParamChange(char.id, field, v)}
+                  />
                 ))}
               </div>
 
@@ -91,14 +88,13 @@ export default function MasterCharacterPanel({ campaignId }) {
               {char.perks?.length > 0 && (
                 <div>
                   <h4 className="text-wasteland-400 text-xs uppercase mb-1">Перки</h4>
-                  {char.perks.map(perk => (
-                    <div key={perk.id} className="text-xs">
-                      <span className={`font-bold ${perk.type === 'positive' ? 'text-accent-green' : perk.type === 'negative' ? 'text-accent-red' : 'text-wasteland-300'}`}>
-                        {perk.name}
+                  <div className="flex flex-wrap gap-1">
+                    {char.perks.map(p => (
+                      <span key={p.id} className={`text-xs px-1.5 py-0.5 rounded ${p.type === 'positive' ? 'bg-accent-green/20 text-accent-green' : p.type === 'negative' ? 'bg-accent-red/20 text-accent-red' : 'bg-wasteland-700 text-wasteland-300'}`}>
+                        {p.name}
                       </span>
-                      <span className="text-wasteland-500 ml-1">({perk.cost > 0 ? '+' : ''}{perk.cost})</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -110,6 +106,36 @@ export default function MasterCharacterPanel({ campaignId }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function SliderRow({ label, value, color, onChange }) {
+  const [localValue, setLocalValue] = useState(value);
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleMouseUp = () => {
+    onChange(localValue);
+  };
+
+  return (
+    <div className="flex items-center gap-2 mb-1">
+      <span className="text-wasteland-400 text-xs w-12">{label}</span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={localValue}
+        onChange={(e) => setLocalValue(parseInt(e.target.value))}
+        onMouseUp={handleMouseUp}
+        onTouchEnd={handleMouseUp}
+        className="flex-1 h-1.5 rounded cursor-pointer"
+        style={{ accentColor: color }}
+      />
+      <span className="text-wasteland-300 text-xs w-8">{localValue}%</span>
     </div>
   );
 }
@@ -185,6 +211,11 @@ function MasterSlotRow({ slot, onConditionChange, onAddMod, onRemoveMod }) {
   const item = slot.item;
   const condition = slot.condition_percent ?? item?.condition_percent ?? 100;
   const [showMods, setShowMods] = useState(false);
+  const [localCond, setLocalCond] = useState(condition);
+
+  useEffect(() => {
+    setLocalCond(condition);
+  }, [condition]);
 
   return (
     <div className="bg-wasteland-700 p-2 rounded text-xs">
@@ -195,12 +226,17 @@ function MasterSlotRow({ slot, onConditionChange, onAddMod, onRemoveMod }) {
       <div className="flex items-center gap-2 mt-1">
         <span className="text-wasteland-500">Состояние:</span>
         <input
-          type="range" min="0" max="100" value={condition}
-          onChange={e => onConditionChange(slot.id, parseInt(e.target.value))}
+          type="range"
+          min="0"
+          max="100"
+          value={localCond}
+          onChange={(e) => setLocalCond(parseInt(e.target.value))}
+          onMouseUp={() => onConditionChange(slot.id, localCond)}
+          onTouchEnd={() => onConditionChange(slot.id, localCond)}
           className="flex-1 h-1 rounded"
-          style={{ accentColor: condition > 50 ? '#33cc33' : condition > 20 ? '#cc6600' : '#cc3333' }}
+          style={{ accentColor: localCond > 50 ? '#33cc33' : localCond > 20 ? '#cc6600' : '#cc3333' }}
         />
-        <span className="text-wasteland-300 w-8">{condition}%</span>
+        <span className="text-wasteland-300 w-8">{localCond}%</span>
       </div>
 
       <div className="mt-1">
