@@ -5,13 +5,19 @@ export default function MasterCharacterPanel({ campaignId }) {
   const [characters, setCharacters] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = async () => {
     try {
+      setError('');
       const chars = await api.getCampaignCharacters(campaignId);
       setCharacters(chars);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setError(e.message);
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [campaignId]);
@@ -26,15 +32,15 @@ export default function MasterCharacterPanel({ campaignId }) {
   };
 
   if (loading) return <p className="text-wasteland-400 text-center py-4">Загрузка...</p>;
+  if (error) return <p className="text-accent-red text-center py-4">Ошибка: {error}</p>;
 
   return (
     <div className="space-y-3">
       <h2 className="text-xl font-stylized text-accent-orange mb-4">Персонажи игроков</h2>
-      {characters.length === 0 && <p className="text-wasteland-500">Нет персонажей</p>}
+      {characters.length === 0 && <p className="text-wasteland-500 text-center py-4">Нет персонажей</p>}
 
       {characters.map(char => (
         <div key={char.id} className="bg-wasteland-800 rounded-lg border border-wasteland-600 overflow-hidden">
-          {/* Заголовок карточки */}
           <div
             onClick={() => toggleExpand(char.id)}
             className="flex justify-between items-center p-3 cursor-pointer hover:bg-wasteland-700 transition"
@@ -46,31 +52,28 @@ export default function MasterCharacterPanel({ campaignId }) {
             <span className="text-wasteland-400 text-sm">{expanded[char.id] ? '▲' : '▼'}</span>
           </div>
 
-          {/* Развёрнутое содержимое */}
           {expanded[char.id] && (
             <div className="p-3 border-t border-wasteland-600 space-y-4">
-              {/* Параметры */}
               <div>
                 <h4 className="text-wasteland-400 text-xs uppercase mb-2">Состояние</h4>
                 {[
-                  { label: 'Еда', field: 'food', value: char.food ?? 100 },
-                  { label: 'Вода', field: 'water', value: char.water ?? 100 },
-                  { label: 'Стресс', field: 'stress', value: char.stress ?? 0 },
-                ].map(({ label, field, value }) => (
+                  { label: 'Еда', field: 'food', value: char.food ?? 100, color: '#33cc33' },
+                  { label: 'Вода', field: 'water', value: char.water ?? 100, color: '#3399ff' },
+                  { label: 'Стресс', field: 'stress', value: char.stress ?? 0, color: '#cc3333' },
+                ].map(({ label, field, value, color }) => (
                   <div key={field} className="flex items-center gap-2 mb-1">
                     <span className="text-wasteland-400 text-xs w-12">{label}</span>
                     <input
                       type="range" min="0" max="100" value={value}
                       onChange={e => handleParamChange(char.id, field, parseInt(e.target.value))}
                       className="flex-1 h-1.5 rounded cursor-pointer"
-                      style={{ accentColor: field === 'stress' ? '#cc3333' : '#33cc33' }}
+                      style={{ accentColor: color }}
                     />
                     <span className="text-wasteland-300 text-xs w-8">{value}%</span>
                   </div>
                 ))}
               </div>
 
-              {/* Навыки */}
               {char.skills?.length > 0 && (
                 <div>
                   <h4 className="text-wasteland-400 text-xs uppercase mb-1">Навыки</h4>
@@ -85,7 +88,20 @@ export default function MasterCharacterPanel({ campaignId }) {
                 </div>
               )}
 
-              {/* Инвентарь */}
+              {char.perks?.length > 0 && (
+                <div>
+                  <h4 className="text-wasteland-400 text-xs uppercase mb-1">Перки</h4>
+                  {char.perks.map(perk => (
+                    <div key={perk.id} className="text-xs">
+                      <span className={`font-bold ${perk.type === 'positive' ? 'text-accent-green' : perk.type === 'negative' ? 'text-accent-red' : 'text-wasteland-300'}`}>
+                        {perk.name}
+                      </span>
+                      <span className="text-wasteland-500 ml-1">({perk.cost > 0 ? '+' : ''}{perk.cost})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div>
                 <h4 className="text-wasteland-400 text-xs uppercase mb-2">Инвентарь</h4>
                 <MasterInventory charId={char.id} inventory={char.inventory || []} onRefresh={load} />
@@ -122,9 +138,9 @@ function MasterInventory({ charId, inventory, onRefresh }) {
     const modItems = allItems.filter(i => i.type === 'модификация');
     if (modItems.length === 0) { alert('Нет модификаций в базе'); return; }
     const modList = modItems.map(i => `${i.name} (${i.id})`).join('\n');
-    const modId = prompt(`Выберите модификацию:\n${modList}`);
+    const modId = prompt(`ID модификации:\n${modList}`);
     if (modId) {
-      await api.addMod(slotId, modId);
+      await api.addMod(slotId, modId.trim());
       onRefresh();
     }
   };
@@ -187,7 +203,6 @@ function MasterSlotRow({ slot, onConditionChange, onAddMod, onRemoveMod }) {
         <span className="text-wasteland-300 w-8">{condition}%</span>
       </div>
 
-      {/* Модификации */}
       <div className="mt-1">
         <button onClick={() => setShowMods(!showMods)} className="text-wasteland-400 hover:text-wasteland-200 text-xs">
           {showMods ? '▲' : '▼'} Модификации ({(slot.mods || []).length})
