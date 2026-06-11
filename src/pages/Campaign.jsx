@@ -519,51 +519,98 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
 }
 
 function TimeCounter({ date, hours, minutes, onChange }) {
-  const [d, setD] = useState(date);
-  const [h, setH] = useState(hours);
-  const [m, setM] = useState(minutes);
+  // Разбираем пропсы
+  const initDate = date || '2026-01-01';
+  const [y, setY] = useState(parseInt(initDate.substring(0, 4)));
+  const [mo, setMo] = useState(parseInt(initDate.substring(5, 7)));
+  const [d, setD] = useState(parseInt(initDate.substring(8, 10)));
+  const [h, setH] = useState(hours ?? 12);
+  const [m, setM] = useState(minutes ?? 0);
 
-  useEffect(() => { setD(date); setH(hours); setM(minutes); }, [date, hours, minutes]);
+  useEffect(() => {
+    const nd = date || '2026-01-01';
+    setY(parseInt(nd.substring(0, 4)));
+    setMo(parseInt(nd.substring(5, 7)));
+    setD(parseInt(nd.substring(8, 10)));
+    setH(hours ?? 12);
+    setM(minutes ?? 0);
+  }, [date, hours, minutes]);
 
-  const update = (newD, newH, newM) => {
-    setD(newD); setH(newH); setM(newM);
-    onChange(newD, newH, newM);
+  const save = (newY, newMo, newD, newH, newM) => {
+    // Формируем дату
+    const month = Math.max(1, Math.min(12, newMo || 1));
+    const day = Math.max(1, Math.min(31, newD || 1));
+    const dateStr = `${newY}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const hour = Math.max(0, Math.min(23, newH ?? 0));
+    const minute = Math.max(0, Math.min(59, newM ?? 0));
+    onChange(dateStr, hour, minute);
+  };
+
+  const handleBlur = () => {
+    save(y, mo, d, h, m);
   };
 
   const addHours = (n) => {
     let nh = h + n;
     let nd = d;
-    if (nh >= 24) { nd = shiftDate(d, Math.floor(nh / 24)); nh = nh % 24; }
-    else if (nh < 0) { nd = shiftDate(d, Math.ceil(nh / 24) - 1); nh = 24 + (nh % 24); if (nh === 24) nh = 0; }
-    update(nd, nh, m);
-  };
-
-  const addMinutes = (n) => {
-    let nm = m + n;
-    let nh = h;
-    let nd = d;
-    if (nm >= 60) { nh += Math.floor(nm / 60); nm = nm % 60; }
-    else if (nm < 0) { nh -= 1; nm = 60 + nm; if (nm === 60) nm = 0; }
-    if (nh >= 24) { nd = shiftDate(d, Math.floor(nh / 24)); nh = nh % 24; }
-    else if (nh < 0) { nd = shiftDate(d, Math.ceil(nh / 24) - 1); nh = 24 + (nh % 24); if (nh === 24) nh = 0; }
-    update(nd, nh, nm);
-  };
-
-  const shiftDate = (dateStr, days) => {
-    const dt = new Date(dateStr);
-    dt.setDate(dt.getDate() + days);
-    return dt.toISOString().substring(0, 10);
+    let nmo = mo;
+    let ny = y;
+    if (nh >= 24) {
+      const daysAdd = Math.floor(nh / 24);
+      nh = nh % 24;
+      const newDate = new Date(y, mo - 1, d + daysAdd);
+      ny = newDate.getFullYear();
+      nmo = newDate.getMonth() + 1;
+      nd = newDate.getDate();
+    } else if (nh < 0) {
+      let totalHours = h + n;
+      const totalDays = Math.floor(totalHours / 24);
+      nh = ((totalHours % 24) + 24) % 24;
+      const newDate = new Date(y, mo - 1, d + totalDays);
+      ny = newDate.getFullYear();
+      nmo = newDate.getMonth() + 1;
+      nd = newDate.getDate();
+    }
+    setY(ny); setMo(nmo); setD(nd); setH(nh);
+    save(ny, nmo, nd, nh, m);
   };
 
   return (
     <div className="flex items-center gap-1 text-xs">
       <button onClick={() => addHours(-1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="-1 час">−</button>
-      <span className="text-wasteland-400 whitespace-nowrap">
-        🕐 {d} {String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}
-      </span>
+      <div className="flex items-center gap-0.5">
+        <input
+          type="number" value={y} onChange={e => setY(parseInt(e.target.value) || 2026)} onBlur={handleBlur}
+          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-14 text-center"
+          min="2000" max="2100"
+        />
+        <span className="text-wasteland-500">-</span>
+        <input
+          type="number" value={mo} onChange={e => setMo(parseInt(e.target.value) || 1)} onBlur={handleBlur}
+          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center"
+          min="1" max="12"
+        />
+        <span className="text-wasteland-500">-</span>
+        <input
+          type="number" value={d} onChange={e => setD(parseInt(e.target.value) || 1)} onBlur={handleBlur}
+          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center"
+          min="1" max="31"
+        />
+      </div>
+      <div className="flex items-center gap-0.5 ml-1">
+        <input
+          type="number" value={h} onChange={e => setH(parseInt(e.target.value) || 0)} onBlur={handleBlur}
+          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center"
+          min="0" max="23"
+        />
+        <span className="text-wasteland-500">:</span>
+        <input
+          type="number" value={m} onChange={e => setM(parseInt(e.target.value) || 0)} onBlur={handleBlur}
+          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center"
+          min="0" max="59"
+        />
+      </div>
       <button onClick={() => addHours(1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="+1 час">+</button>
-      <button onClick={() => addMinutes(-10)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300 text-xs" title="-10 мин">−10м</button>
-      <button onClick={() => addMinutes(10)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300 text-xs" title="+10 мин">+10м</button>
     </div>
   );
 }
