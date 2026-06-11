@@ -240,18 +240,17 @@ export default function Campaign({ user }) {
             </button>
           )}
           <span className="text-wasteland-500 text-xs hidden sm:inline">Код: {campaign.invite_code}</span>
-         {isMaster ? (
-  <TimeCounter
-    date={campaign.game_time_date || '2026-01-01'}
-    hours={campaign.game_time_hours || 12}
-    minutes={campaign.game_time_minutes || 0}
-    onChange={(d, h, m) => api.updateCampaignTime(id, { game_time_date: d, game_time_hours: h, game_time_minutes: m }).then(() => loadCampaign())}
-  />
-) : (
-  <span className="text-xs text-wasteland-500">
-    🕐 {campaign.game_time_date || '2026-01-01'} {String(campaign.game_time_hours || 12).padStart(2, '0')}:{String(campaign.game_time_minutes || 0).padStart(2, '0')}
-  </span>
-)}
+          {isMaster ? (
+            <TimeCounter
+              date={campaign.game_time_date || '2026-01-01'}
+              hours={campaign.game_time_hours || 12}
+              minutes={campaign.game_time_minutes || 0}
+              onChange={(d, h, m) => api.updateCampaignTime(id, { game_time_date: d, game_time_hours: h, game_time_minutes: m }).then(() => loadCampaign())}
+            />
+          ) : (
+            <span className="text-xs text-wasteland-500">
+              🕐 {formatTime()}
+            </span>
           )}
         </div>
       </header>
@@ -515,6 +514,56 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function TimeCounter({ date, hours, minutes, onChange }) {
+  const [d, setD] = useState(date);
+  const [h, setH] = useState(hours);
+  const [m, setM] = useState(minutes);
+
+  useEffect(() => { setD(date); setH(hours); setM(minutes); }, [date, hours, minutes]);
+
+  const update = (newD, newH, newM) => {
+    setD(newD); setH(newH); setM(newM);
+    onChange(newD, newH, newM);
+  };
+
+  const addHours = (n) => {
+    let nh = h + n;
+    let nd = d;
+    if (nh >= 24) { nd = shiftDate(d, Math.floor(nh / 24)); nh = nh % 24; }
+    else if (nh < 0) { nd = shiftDate(d, Math.ceil(nh / 24) - 1); nh = 24 + (nh % 24); if (nh === 24) nh = 0; }
+    update(nd, nh, m);
+  };
+
+  const addMinutes = (n) => {
+    let nm = m + n;
+    let nh = h;
+    let nd = d;
+    if (nm >= 60) { nh += Math.floor(nm / 60); nm = nm % 60; }
+    else if (nm < 0) { nh -= 1; nm = 60 + nm; if (nm === 60) nm = 0; }
+    if (nh >= 24) { nd = shiftDate(d, Math.floor(nh / 24)); nh = nh % 24; }
+    else if (nh < 0) { nd = shiftDate(d, Math.ceil(nh / 24) - 1); nh = 24 + (nh % 24); if (nh === 24) nh = 0; }
+    update(nd, nh, nm);
+  };
+
+  const shiftDate = (dateStr, days) => {
+    const dt = new Date(dateStr);
+    dt.setDate(dt.getDate() + days);
+    return dt.toISOString().substring(0, 10);
+  };
+
+  return (
+    <div className="flex items-center gap-1 text-xs">
+      <button onClick={() => addHours(-1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="-1 час">−</button>
+      <span className="text-wasteland-400 whitespace-nowrap">
+        🕐 {d} {String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}
+      </span>
+      <button onClick={() => addHours(1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="+1 час">+</button>
+      <button onClick={() => addMinutes(-10)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300 text-xs" title="-10 мин">−10м</button>
+      <button onClick={() => addMinutes(10)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300 text-xs" title="+10 мин">+10м</button>
     </div>
   );
 }
