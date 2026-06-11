@@ -6,6 +6,10 @@ import NPCPanel from '../components/NPCPanel';
 import InventoryPanel from '../components/InventoryPanel';
 import ScenePanel from '../components/ScenePanel';
 import MasterCharacterPanel from '../components/MasterCharacterPanel';
+import MasterNotes from '../components/MasterNotes';
+import HandoutsPanel from '../components/HandoutsPanel';
+import SoundPad from '../components/SoundPad';
+import AdminPanel from '../components/AdminPanel';
 
 const SOCKET_URL = 'https://apostol-api.onrender.com';
 
@@ -26,12 +30,11 @@ export default function Campaign({ user }) {
   const [allCharacters, setAllCharacters] = useState([]);
   const socketRef = useRef(null);
   const chatRef = useRef(null);
-  const characterRef = useRef(character); // реф для актуального персонажа в сокетах
+  const characterRef = useRef(character);
 
   const userRole = campaign?.members?.find(m => m.user_id === user.id)?.role;
   const isMaster = userRole === 'master' || userRole === 'co-master';
 
-  // Синхронизируем реф с актуальным персонажем
   useEffect(() => {
     characterRef.current = character;
   }, [character]);
@@ -60,7 +63,6 @@ export default function Campaign({ user }) {
     socket.emit('join_campaign', { userId: user.id, campaignId: id });
     socket.emit('set_role', userRole || 'player');
 
-    // Слушатель обновления персонажа (мастер изменил параметры)
     socket.on('character_updated', (data) => {
       const currentChar = characterRef.current;
       if (currentChar && data.character_id === currentChar.id) {
@@ -75,9 +77,7 @@ export default function Campaign({ user }) {
         time: new Date(data.time).toLocaleTimeString(),
         isRoll: true,
       };
-      if (data.hidden) {
-        msg.user = 'Скрытый';
-      }
+      if (data.hidden) msg.user = 'Скрытый';
       addMessage(msg);
     });
 
@@ -88,6 +88,18 @@ export default function Campaign({ user }) {
         time: new Date(data.created_at).toLocaleTimeString(),
         isRoll: data.is_roll,
       });
+    });
+
+    socket.on('sound_play', (data) => {
+      if (data.campaignId === id) {
+        addMessage({ user: '🔊 Соундпад', text: `Играет: ${data.soundName || 'музыка'}`, time: new Date().toLocaleTimeString() });
+      }
+    });
+
+    socket.on('sound_stop', (data) => {
+      if (data.campaignId === id) {
+        addMessage({ user: '🔊 Соундпад', text: 'Музыка остановлена', time: new Date().toLocaleTimeString() });
+      }
     });
 
     return () => {
@@ -121,7 +133,6 @@ export default function Campaign({ user }) {
       const allPerks = await api.getPerks();
       setPerks(allPerks);
 
-      // Загружаем историю чата
       try {
         const history = await api.getChatMessages(id);
         const formatted = history.map(m => ({
@@ -174,19 +185,14 @@ export default function Campaign({ user }) {
     const formula = `${count}d${sides}${mod ? ' + ' + mod : ''} = ${sum}`;
 
     setInput('');
-
     try {
       await api.sendChatMessage(id, `🎲 ${formula}`, true);
     } catch (e) { console.error(e); }
 
     if (socketRef.current && campaign) {
       socketRef.current.emit('dice_roll', {
-        campaignId: id,
-        userId: user.id,
-        username: user.username,
-        formula,
-        sum,
-        hidden: hiddenMode && isMaster,
+        campaignId: id, userId: user.id, username: user.username,
+        formula, sum, hidden: hiddenMode && isMaster,
       });
     }
   };
@@ -201,12 +207,8 @@ export default function Campaign({ user }) {
 
       if (socketRef.current && campaign) {
         socketRef.current.emit('dice_roll', {
-          campaignId: id,
-          userId: user.id,
-          username: character.name,
-          skillName,
-          formula: result.formula,
-          sum: result.sum,
+          campaignId: id, userId: user.id, username: character.name,
+          skillName, formula: result.formula, sum: result.sum,
           hidden: hiddenMode && isMaster,
         });
       }
@@ -230,7 +232,15 @@ export default function Campaign({ user }) {
     { key: 'character', label: 'Перс' },
     ...(!isMaster ? [{ key: 'inventory', label: 'Инв' }] : []),
     { key: 'scene', label: 'Сцена' },
-    ...(isMaster ? [{ key: 'npcs', label: 'NPC' }] : []),
+    ...(isMaster ? [
+      { key: 'npcs', label: 'NPC' },
+      { key: 'notes', label: 'Заметки' },
+      { key: 'handouts', label: 'Хендауты' },
+      { key: 'sounds', label: 'Звук' },
+      { key: 'admin', label: 'БД' },
+    ] : [
+      { key: 'handouts', label: 'Раздача' },
+    ]),
   ];
 
   const formatTime = () => {
@@ -262,9 +272,7 @@ export default function Campaign({ user }) {
               onChange={(d, h, m) => api.updateCampaignTime(id, { game_time_date: d, game_time_hours: h, game_time_minutes: m }).then(() => loadCampaign())}
             />
           ) : (
-            <span className="text-xs text-wasteland-500">
-              🕐 {formatTime()}
-            </span>
+            <span className="text-xs text-wasteland-500">🕐 {formatTime()}</span>
           )}
         </div>
       </header>
@@ -343,6 +351,30 @@ export default function Campaign({ user }) {
           {activeTab === 'npcs' && isMaster && (
             <div className="flex-1 overflow-y-auto p-3 min-h-0">
               <NPCPanel campaignId={id} socketRef={socketRef} />
+            </div>
+          )}
+
+          {activeTab === 'notes' && isMaster && (
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <MasterNotes campaignId={id} />
+            </div>
+          )}
+
+          {activeTab === 'handouts' && (
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <HandoutsPanel campaignId={id} isMaster={isMaster} />
+            </div>
+          )}
+
+          {activeTab === 'sounds' && isMaster && (
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} />
+            </div>
+          )}
+
+          {activeTab === 'admin' && isMaster && (
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <AdminPanel />
             </div>
           )}
         </div>
@@ -472,19 +504,12 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
 function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
   const [editMode, setEditMode] = useState(false);
   const [params, setParams] = useState({
-    food: character.food ?? 100,
-    water: character.water ?? 100,
-    stress: character.stress ?? 0,
-    game_time_date: character.game_time_date ?? '2026-01-01',
-    game_time_hours: character.game_time_hours ?? 12,
-    game_time_minutes: character.game_time_minutes ?? 0,
+    food: character.food ?? 100, water: character.water ?? 100, stress: character.stress ?? 0,
+    game_time_date: character.game_time_date ?? '2026-01-01', game_time_hours: character.game_time_hours ?? 12, game_time_minutes: character.game_time_minutes ?? 0,
     carry_weight_max: character.carry_weight_max ?? 50,
   });
 
-  const handleSlider = (field, value) => {
-    setParams(prev => ({ ...prev, [field]: field === 'game_time_date' ? value : parseInt(value) }));
-  };
-
+  const handleSlider = (field, value) => setParams(prev => ({ ...prev, [field]: field === 'game_time_date' ? value : parseInt(value) }));
   const saveParams = async () => { await onUpdate(params); setEditMode(false); };
 
   return (
@@ -558,30 +583,21 @@ function TimeCounter({ date, hours, minutes, onChange }) {
     onChange(dateStr, hour, minute);
   };
 
-  const handleBlur = () => {
-    save(y, mo, d, h, m);
-  };
+  const handleBlur = () => save(y, mo, d, h, m);
 
   const addHours = (n) => {
-    let nh = h + n;
-    let nd = d;
-    let nmo = mo;
-    let ny = y;
+    let nh = h + n, nd = d, nmo = mo, ny = y;
     if (nh >= 24) {
       const daysAdd = Math.floor(nh / 24);
       nh = nh % 24;
       const newDate = new Date(y, mo - 1, d + daysAdd);
-      ny = newDate.getFullYear();
-      nmo = newDate.getMonth() + 1;
-      nd = newDate.getDate();
+      ny = newDate.getFullYear(); nmo = newDate.getMonth() + 1; nd = newDate.getDate();
     } else if (nh < 0) {
       let totalHours = h + n;
       const totalDays = Math.floor(totalHours / 24);
       nh = ((totalHours % 24) + 24) % 24;
       const newDate = new Date(y, mo - 1, d + totalDays);
-      ny = newDate.getFullYear();
-      nmo = newDate.getMonth() + 1;
-      nd = newDate.getDate();
+      ny = newDate.getFullYear(); nmo = newDate.getMonth() + 1; nd = newDate.getDate();
     }
     setY(ny); setMo(nmo); setD(nd); setH(nh);
     save(ny, nmo, nd, nh, m);
@@ -591,36 +607,16 @@ function TimeCounter({ date, hours, minutes, onChange }) {
     <div className="flex items-center gap-1 text-xs">
       <button onClick={() => addHours(-1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="-1 час">−</button>
       <div className="flex items-center gap-0.5">
-        <input
-          type="number" value={y} onChange={e => setY(parseInt(e.target.value) || 2026)} onBlur={handleBlur}
-          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-14 text-center"
-          min="2000" max="2100"
-        />
+        <input type="number" value={y} onChange={e => setY(parseInt(e.target.value) || 2026)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-14 text-center" min="2000" max="2100" />
         <span className="text-wasteland-500">-</span>
-        <input
-          type="number" value={mo} onChange={e => setMo(parseInt(e.target.value) || 1)} onBlur={handleBlur}
-          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center"
-          min="1" max="12"
-        />
+        <input type="number" value={mo} onChange={e => setMo(parseInt(e.target.value) || 1)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="1" max="12" />
         <span className="text-wasteland-500">-</span>
-        <input
-          type="number" value={d} onChange={e => setD(parseInt(e.target.value) || 1)} onBlur={handleBlur}
-          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center"
-          min="1" max="31"
-        />
+        <input type="number" value={d} onChange={e => setD(parseInt(e.target.value) || 1)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="1" max="31" />
       </div>
       <div className="flex items-center gap-0.5 ml-1">
-        <input
-          type="number" value={h} onChange={e => setH(parseInt(e.target.value) || 0)} onBlur={handleBlur}
-          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center"
-          min="0" max="23"
-        />
+        <input type="number" value={h} onChange={e => setH(parseInt(e.target.value) || 0)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="0" max="23" />
         <span className="text-wasteland-500">:</span>
-        <input
-          type="number" value={m} onChange={e => setM(parseInt(e.target.value) || 0)} onBlur={handleBlur}
-          className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center"
-          min="0" max="59"
-        />
+        <input type="number" value={m} onChange={e => setM(parseInt(e.target.value) || 0)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="0" max="59" />
       </div>
       <button onClick={() => addHours(1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="+1 час">+</button>
     </div>
