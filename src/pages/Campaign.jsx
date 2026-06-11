@@ -26,9 +26,15 @@ export default function Campaign({ user }) {
   const [allCharacters, setAllCharacters] = useState([]);
   const socketRef = useRef(null);
   const chatRef = useRef(null);
+  const characterRef = useRef(character); // реф для актуального персонажа в сокетах
 
   const userRole = campaign?.members?.find(m => m.user_id === user.id)?.role;
   const isMaster = userRole === 'master' || userRole === 'co-master';
+
+  // Синхронизируем реф с актуальным персонажем
+  useEffect(() => {
+    characterRef.current = character;
+  }, [character]);
 
   const addMessage = useCallback((msg) => {
     setMessages(prev => [...prev, msg]);
@@ -53,6 +59,14 @@ export default function Campaign({ user }) {
     socketRef.current = socket;
     socket.emit('join_campaign', { userId: user.id, campaignId: id });
     socket.emit('set_role', userRole || 'player');
+
+    // Слушатель обновления персонажа (мастер изменил параметры)
+    socket.on('character_updated', (data) => {
+      const currentChar = characterRef.current;
+      if (currentChar && data.character_id === currentChar.id) {
+        setCharacter(prev => prev ? { ...prev, ...data.updates } : prev);
+      }
+    });
 
     socket.on('dice_result', (data) => {
       const msg = {
@@ -519,7 +533,6 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
 }
 
 function TimeCounter({ date, hours, minutes, onChange }) {
-  // Разбираем пропсы
   const initDate = date || '2026-01-01';
   const [y, setY] = useState(parseInt(initDate.substring(0, 4)));
   const [mo, setMo] = useState(parseInt(initDate.substring(5, 7)));
@@ -537,7 +550,6 @@ function TimeCounter({ date, hours, minutes, onChange }) {
   }, [date, hours, minutes]);
 
   const save = (newY, newMo, newD, newH, newM) => {
-    // Формируем дату
     const month = Math.max(1, Math.min(12, newMo || 1));
     const day = Math.max(1, Math.min(31, newD || 1));
     const dateStr = `${newY}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
