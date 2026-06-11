@@ -47,6 +47,19 @@ export default function MasterCharacterPanel({ campaignId }) {
           >
             <div>
               <span className="text-wasteland-100 font-bold">{char.name}</span>
+              <span className="text-wasteland-100 font-bold">{char.name}</span>
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    if (confirm(`Удалить персонажа "${char.name}"? Игрок сможет создать нового.`)) {
+      api.deleteCharacter(char.id).then(() => load());
+    }
+  }}
+  className="text-accent-red hover:text-red-400 text-xs ml-2"
+  title="Удалить персонажа"
+>
+  🗑️
+</button>
               <span className="text-accent-orange ml-2 text-sm">{char.profession?.name}</span>
             </div>
             <span className="text-wasteland-400 text-sm">{expanded[char.id] ? '▲' : '▼'}</span>
