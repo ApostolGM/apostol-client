@@ -104,5 +104,5 @@ export const api = {
 
   // Backgrounds
   uploadBackground: (campaignId, name, url) => request('/upload/background', { method: 'POST', body: JSON.stringify({ campaign_id: campaignId, name, url }) }),
+  uploadFile: (image, name, campaignId) => request('/upload/file', { method: 'POST', body: JSON.stringify({ image, name, campaign_id: campaignId }) }),
   getBackgrounds: (campaignId) => request(`/backgrounds/${campaignId}`),
-};
