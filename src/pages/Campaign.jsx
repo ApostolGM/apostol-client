@@ -240,23 +240,18 @@ export default function Campaign({ user }) {
             </button>
           )}
           <span className="text-wasteland-500 text-xs hidden sm:inline">Код: {campaign.invite_code}</span>
-          {isMaster ? (
-            <button onClick={() => {
-              const d = prompt('Дата (ГГГГ-ММ-ДД):', campaign.game_time_date || '2026-01-01');
-              if (!d) return;
-              const h = prompt('Часы (0-23):', campaign.game_time_hours || 12);
-              if (h === null) return;
-              const m = prompt('Минуты (0-59):', campaign.game_time_minutes || 0);
-              if (m === null) return;
-              api.updateCampaignTime(id, { game_time_date: d, game_time_hours: parseInt(h), game_time_minutes: parseInt(m) })
-                .then(() => loadCampaign());
-            }} className="text-xs text-wasteland-400 hover:text-wasteland-200">
-              🕐 {formatTime()}
-            </button>
-          ) : (
-            <span className="text-xs text-wasteland-500">
-              🕐 {formatTime()}
-            </span>
+         {isMaster ? (
+  <TimeCounter
+    date={campaign.game_time_date || '2026-01-01'}
+    hours={campaign.game_time_hours || 12}
+    minutes={campaign.game_time_minutes || 0}
+    onChange={(d, h, m) => api.updateCampaignTime(id, { game_time_date: d, game_time_hours: h, game_time_minutes: m }).then(() => loadCampaign())}
+  />
+) : (
+  <span className="text-xs text-wasteland-500">
+    🕐 {campaign.game_time_date || '2026-01-01'} {String(campaign.game_time_hours || 12).padStart(2, '0')}:{String(campaign.game_time_minutes || 0).padStart(2, '0')}
+  </span>
+)}
           )}
         </div>
       </header>
