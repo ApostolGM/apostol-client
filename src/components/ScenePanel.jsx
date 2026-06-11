@@ -13,6 +13,8 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const [tool, setTool] = useState('select');
   const [color, setColor] = useState('#ff0000');
   const [lineWidth, setLineWidth] = useState(3);
+  const [tokenSize, setTokenSize] = useState(36);
+  const [zoom, setZoom] = useState(1);
   const [selectedNote, setSelectedNote] = useState(null);
 
   const canvasRef = useRef(null);
@@ -60,9 +62,20 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const h2 = (data) => {
       if (data.campaignId === campaignId && data.sceneType === sceneType && data.tokens) setTokens(data.tokens);
     };
+    const h3 = (data) => {
+      if (data.campaignId === campaignId && data.sceneType === sceneType && data.drawings) {
+        drawingsRef.current = data.drawings;
+        redrawAll();
+      }
+    };
     socket.on('scene_updated', h1);
     socket.on('scene_token_moved', h2);
-    return () => { socket.off('scene_updated', h1); socket.off('scene_token_moved', h2); };
+    socket.on('scene_drawings', h3);
+    return () => {
+      socket.off('scene_updated', h1);
+      socket.off('scene_token_moved', h2);
+      socket.off('scene_drawings', h3);
+    };
   }, [campaignId, sceneType, socketRef]);
 
   // Очистка холста
@@ -78,21 +91,18 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!canvasRef.current || !bgImageRef.current) return;
     const canvas = canvasRef.current;
     const img = bgImageRef.current;
-    
-    // Устанавливаем размер холста по изображению
+
     canvas.width = img.naturalWidth || img.width || 800;
     canvas.height = img.naturalHeight || img.height || 600;
-    
+
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Рисуем сохранённые рисунки
+
     for (const d of drawingsRef.current) {
       drawShape(ctx, d);
     }
   };
 
-  // Отрисовка одной фигуры
   const drawShape = (ctx, d) => {
     if (d.tool === 'pencil' && d.points?.length > 0) {
       ctx.strokeStyle = d.color || '#ff0000';
@@ -109,7 +119,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  // Сохранение сцены
+  // Сохранение сцены (для фона)
   const saveScene = async () => {
     setError('');
     try {
@@ -124,6 +134,29 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         socketRef.current.emit('scene_update', { campaignId, sceneType, updates: {} });
       }
     } catch (e) { setError(e.message); }
+  };
+
+  // Отправка токенов в реальном времени
+  const syncTokens = (newTokens) => {
+    setTokens(newTokens);
+    if (socketRef?.current) {
+      socketRef.current.emit('scene_token_move', {
+        campaignId,
+        sceneType,
+        tokens: newTokens,
+      });
+    }
+  };
+
+  // Отправка рисунков в реальном времени
+  const syncDrawings = () => {
+    if (socketRef?.current) {
+      socketRef.current.emit('scene_drawings', {
+        campaignId,
+        sceneType,
+        drawings: drawingsRef.current,
+      });
+    }
   };
 
   // Загрузка изображения
@@ -144,25 +177,31 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     img.src = selectedBg.url;
   }, [selectedBg]);
 
-  // Получение координат относительно холста
+  // Зум колёсиком
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setZoom(prev => Math.max(0.3, Math.min(3, prev + delta)));
+  };
+
+  // Получение координат относительно холста (с учётом зума)
   const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    
-    // Масштабирование координат
+
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    
+
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
     };
   };
 
-  // Получение координат для токенов (относительно контейнера)
+  // Получение координат для токенов (с учётом зума)
   const getTokenPos = (e) => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
@@ -170,10 +209,10 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const rect = container.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
+
+    const scaleX = canvas.width / (rect.width / zoom);
+    const scaleY = canvas.height / (rect.height / zoom);
+
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
@@ -223,7 +262,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!isMaster || !isDrawing.current) return;
     isDrawing.current = false;
 
-    // Сохраняем рисунок (только для карандаша)
     if (currentPath.current.length > 0 && tool === 'pencil') {
       drawingsRef.current = [...drawingsRef.current, {
         tool: 'pencil',
@@ -231,31 +269,29 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         lineWidth,
         points: currentPath.current,
       }];
+      syncDrawings();
     }
-    
-    // Для ластика: удаляем задеты рисунки
+
     if (tool === 'eraser' && currentPath.current.length > 0) {
       const eraserPath = currentPath.current;
       drawingsRef.current = drawingsRef.current.filter(d => {
         if (d.tool !== 'pencil' || !d.points?.length) return true;
-        // Проверяем, есть ли пересечение
         for (const dp of d.points) {
           for (const ep of eraserPath) {
             const dx = dp.x - ep.x;
             const dy = dp.y - ep.y;
             if (Math.sqrt(dx * dx + dy * dy) < (lineWidth * 4 + (d.lineWidth || 3))) {
-              return false; // Удаляем рисунок
+              return false;
             }
           }
         }
         return true;
       });
-      // Перерисовываем
       redrawAll();
+      syncDrawings();
     }
 
     currentPath.current = [];
-    // Восстанавливаем композит
     if (canvasRef.current) {
       canvasRef.current.getContext('2d').globalCompositeOperation = 'source-over';
     }
@@ -268,7 +304,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const pos = getTokenPos(e);
     const text = prompt('Текст заметки:');
     if (text) {
-      setTokens(prev => [...prev, {
+      const newToken = {
         id: `note_${Date.now()}`,
         type: 'note',
         label: '📝',
@@ -276,17 +312,19 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         x: pos.x,
         y: pos.y,
         note: text,
-      }]);
+      };
+      const newTokens = [...tokens, newToken];
+      syncTokens(newTokens);
     }
   };
 
-  // Токены персонажей/NPC
+  // Токены
   const addToken = (type, refId, name, colorVal) => {
     if (!isMaster) return;
     const canvas = canvasRef.current;
     const w = canvas?.width || 800;
     const h = canvas?.height || 600;
-    setTokens(prev => [...prev, {
+    const newToken = {
       id: `${type}_${refId}_${Date.now()}`,
       type,
       ref_id: refId,
@@ -295,18 +333,21 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       x: w * 0.3 + Math.random() * w * 0.4,
       y: h * 0.3 + Math.random() * h * 0.4,
       note: null,
-    }]);
+    };
+    const newTokens = [...tokens, newToken];
+    syncTokens(newTokens);
   };
 
   const removeToken = (tokenId) => {
-    setTokens(prev => prev.filter(t => t.id !== tokenId));
+    const newTokens = tokens.filter(t => t.id !== tokenId);
+    syncTokens(newTokens);
   };
 
   const startTokenDrag = (e, tokenId) => {
     if (!isMaster || tool !== 'select') return;
     e.preventDefault();
     e.stopPropagation();
-    
+
     draggedToken.current = tokenId;
     const pos = getTokenPos(e);
     const token = tokens.find(t => t.id === tokenId);
@@ -319,26 +360,19 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!draggedToken.current || !isMaster) return;
     e.preventDefault();
     const pos = getTokenPos(e);
-    setTokens(prev => prev.map(t =>
+    const newTokens = tokens.map(t =>
       t.id === draggedToken.current ? {
         ...t,
         x: pos.x - dragOffset.current.x,
         y: pos.y - dragOffset.current.y
       } : t
-    ));
+    );
+    setTokens(newTokens);
   };
 
   const endTokenDrag = () => {
-    if (draggedToken.current && socketRef?.current) {
-      const token = tokens.find(t => t.id === draggedToken.current);
-      if (token) {
-        socketRef.current.emit('scene_token_move', {
-          campaignId,
-          sceneType,
-          tokenId: token.id,
-          tokens: tokens.map(t => t.id === token.id ? token : t)
-        });
-      }
+    if (draggedToken.current) {
+      syncTokens(tokens);
     }
     draggedToken.current = null;
   };
@@ -347,6 +381,38 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     ...(characters || []).map(c => ({ type: 'character', id: c.id, name: c.name, color: '#33cc33' })),
     ...(npcs || []).filter(n => n.visibility === 'combat').map(n => ({ type: 'npc', id: n.id, name: n.name, color: '#cc3333' })),
   ];
+
+  // Расчёт позиции токена с учётом зума
+  const getTokenStyle = (token) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !containerRef.current) return {};
+    const rect = containerRef.current.getBoundingClientRect();
+    const scaleX = canvas.width / (rect.width / zoom);
+    const scaleY = canvas.height / (rect.height / zoom);
+    const size = tokenSize / zoom;
+
+    return {
+      position: 'absolute',
+      left: token.x / scaleX - size / 2,
+      top: token.y / scaleY - size / 2,
+      width: size,
+      height: size,
+      borderRadius: token.type === 'note' ? '30%' : '50%',
+      backgroundColor: token.color,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: 'bold',
+      color: token.type === 'note' ? '#000' : 'white',
+      fontSize: Math.max(8, size * 0.35),
+      border: `2px solid white`,
+      cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
+      zIndex: 30,
+      userSelect: 'none',
+      boxShadow: '0 0 4px rgba(0,0,0,0.5)',
+      touchAction: 'none',
+    };
+  };
 
   return (
     <div className="flex flex-col h-full bg-wasteland-900">
@@ -368,10 +434,22 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             {(tool === 'pencil' || tool === 'eraser') && (
               <>
                 {tool === 'pencil' && <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-5 h-5 rounded cursor-pointer" />}
-                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" />
+                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" title="Толщина линии" />
               </>
             )}
+            <span className="text-wasteland-500 text-xs">Размер:</span>
+            <input type="range" min="16" max="72" value={tokenSize} onChange={e => setTokenSize(parseInt(e.target.value))} className="w-16" title="Размер токенов" />
+            <span className="text-wasteland-500 text-xs">Зум:</span>
+            <input type="range" min="30" max="300" value={Math.round(zoom * 100)} onChange={e => setZoom(parseInt(e.target.value) / 100)} className="w-16" title="Масштаб" />
+            <span className="text-wasteland-400 text-xs">{Math.round(zoom * 100)}%</span>
             <button onClick={saveScene} className="text-xs bg-accent-orange hover:bg-orange-500 text-wasteland-900 px-2 py-1 rounded font-bold">💾</button>
+          </>
+        )}
+        {!isMaster && (
+          <>
+            <span className="text-wasteland-500 text-xs">Зум:</span>
+            <input type="range" min="30" max="300" value={Math.round(zoom * 100)} onChange={e => setZoom(parseInt(e.target.value) / 100)} className="w-16" title="Масштаб" />
+            <span className="text-wasteland-400 text-xs">{Math.round(zoom * 100)}%</span>
           </>
         )}
         {error && <span className="text-accent-red text-xs ml-1">{error}</span>}
@@ -407,6 +485,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         ref={containerRef}
         className="flex-1 overflow-auto bg-wasteland-800"
         style={{ minHeight: '300px', touchAction: isMaster ? 'none' : 'auto' }}
+        onWheel={handleWheel}
         onMouseDown={(e) => {
           if (tool === 'note') addNoteToken(e);
           else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
@@ -421,7 +500,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         onTouchMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
         onTouchEnd={() => { endDraw(); endTokenDrag(); }}
       >
-        <div className="relative inline-block min-w-full min-h-full">
+        <div className="relative inline-block" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
           {selectedBg && (
             <img
               ref={bgImageRef}
@@ -432,7 +511,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             />
           )}
           {!selectedBg && (
-            <div className="flex items-center justify-center h-64 text-wasteland-500 text-sm">Выберите фон</div>
+            <div className="flex items-center justify-center h-64 text-wasteland-500 text-sm" style={{ width: '400px' }}>Выберите фон</div>
           )}
           <canvas
             ref={canvasRef}
@@ -440,43 +519,17 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             style={{ pointerEvents: ['pencil', 'eraser'].includes(tool) ? 'auto' : 'none' }}
           />
           {/* Токены */}
-          {tokens.map(token => {
-            const canvas = canvasRef.current;
-            const scaleX = canvas ? canvas.width / (containerRef.current?.getBoundingClientRect().width || 800) : 1;
-            const scaleY = canvas ? canvas.height / (containerRef.current?.getBoundingClientRect().height || 600) : 1;
-
-            return (
-              <div
-                key={token.id}
-                onMouseDown={(e) => startTokenDrag(e, token.id)}
-                onTouchStart={(e) => startTokenDrag(e, token.id)}
-                onClick={() => { if (token.type === 'note' && token.note) setSelectedNote(token); }}
-                style={{
-                  position: 'absolute',
-                  left: token.x / scaleX - 18,
-                  top: token.y / scaleY - 18,
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  backgroundColor: token.color,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 'bold',
-                  color: token.type === 'note' ? '#000' : 'white',
-                  fontSize: token.type === 'note' ? '16px' : '12px',
-                  border: '2px solid white',
-                  cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
-                  zIndex: 30,
-                  userSelect: 'none',
-                  boxShadow: '0 0 4px rgba(0,0,0,0.5)',
-                  touchAction: 'none',
-                }}
-              >
-                {token.label}
-              </div>
-            );
-          })}
+          {tokens.map(token => (
+            <div
+              key={token.id}
+              onMouseDown={(e) => startTokenDrag(e, token.id)}
+              onTouchStart={(e) => startTokenDrag(e, token.id)}
+              onClick={() => { if (token.type === 'note' && token.note) setSelectedNote(token); }}
+              style={getTokenStyle(token)}
+            >
+              {token.label}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -490,7 +543,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
               {t.name.substring(0, 8)}
             </button>
           ))}
-          <button onClick={() => setTokens([])} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-0.5 rounded text-accent-red flex-shrink-0">✕</button>
+          <button onClick={() => syncTokens([])} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-0.5 rounded text-accent-red flex-shrink-0">✕</button>
         </div>
       )}
 
