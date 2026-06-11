@@ -28,6 +28,7 @@ export default function Campaign({ user }) {
   const [hiddenMode, setHiddenMode] = useState(false);
   const [npcs, setNpcs] = useState([]);
   const [allCharacters, setAllCharacters] = useState([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const socketRef = useRef(null);
   const chatRef = useRef(null);
   const characterRef = useRef(character);
@@ -35,15 +36,11 @@ export default function Campaign({ user }) {
   const userRole = campaign?.members?.find(m => m.user_id === user.id)?.role;
   const isMaster = userRole === 'master' || userRole === 'co-master';
 
-  useEffect(() => {
-    characterRef.current = character;
-  }, [character]);
+  useEffect(() => { characterRef.current = character; }, [character]);
 
   const addMessage = useCallback((msg) => {
     setMessages(prev => [...prev, msg]);
-    setTimeout(() => {
-      chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
-    }, 50);
+    setTimeout(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }); }, 50);
   }, []);
 
   useEffect(() => {
@@ -69,37 +66,13 @@ export default function Campaign({ user }) {
         setCharacter(prev => prev ? { ...prev, ...data.updates } : prev);
       }
     });
-
     socket.on('dice_result', (data) => {
-      const msg = {
-        user: data.username,
-        text: `${data.skillName ? `[${data.skillName}] ` : ''}${data.formula} = ${data.sum}`,
-        time: new Date(data.time).toLocaleTimeString(),
-        isRoll: true,
-      };
+      const msg = { user: data.username, text: `${data.skillName ? `[${data.skillName}] ` : ''}${data.formula} = ${data.sum}`, time: new Date(data.time).toLocaleTimeString(), isRoll: true };
       if (data.hidden) msg.user = 'Скрытый';
       addMessage(msg);
     });
-
     socket.on('chat_message', (data) => {
-      addMessage({
-        user: data.username,
-        text: data.text,
-        time: new Date(data.created_at).toLocaleTimeString(),
-        isRoll: data.is_roll,
-      });
-    });
-
-    socket.on('sound_play', (data) => {
-      if (data.campaignId === id) {
-        addMessage({ user: '🔊 Соундпад', text: `Играет: ${data.soundName || 'музыка'}`, time: new Date().toLocaleTimeString() });
-      }
-    });
-
-    socket.on('sound_stop', (data) => {
-      if (data.campaignId === id) {
-        addMessage({ user: '🔊 Соундпад', text: 'Музыка остановлена', time: new Date().toLocaleTimeString() });
-      }
+      addMessage({ user: data.username, text: data.text, time: new Date(data.created_at).toLocaleTimeString(), isRoll: data.is_roll });
     });
 
     return () => {
@@ -117,112 +90,60 @@ export default function Campaign({ user }) {
         const char = await api.getCharacter(member.character_id);
         setCharacter(char);
       }
-      try {
-        const npcData = await api.getNPCs(id);
-        setNpcs(npcData);
-      } catch (e) { console.error('NPC load error:', e); }
+      try { const npcData = await api.getNPCs(id); setNpcs(npcData); } catch (e) {}
       const chars = [];
       for (const m of (c.members || [])) {
-        if (m.character_id) {
-          try { const ch = await api.getCharacter(m.character_id); chars.push(ch); } catch (e) { /* */ }
-        }
+        if (m.character_id) { try { const ch = await api.getCharacter(m.character_id); chars.push(ch); } catch (e) {} }
       }
       setAllCharacters(chars);
-      const profs = await api.getProfessions();
-      setProfessions(profs);
-      const allPerks = await api.getPerks();
-      setPerks(allPerks);
+      const [profs, allPerks, me] = await Promise.all([
+        api.getProfessions(), api.getPerks(), api.me().catch(() => ({}))
+      ]);
+      setProfessions(profs); setPerks(allPerks);
+      setIsAdmin(me?.role === 'admin');
 
       try {
         const history = await api.getChatMessages(id);
-        const formatted = history.map(m => ({
-          user: m.username,
-          text: m.text,
-          time: new Date(m.created_at).toLocaleTimeString(),
-          isRoll: m.is_roll,
-        }));
-        setMessages(formatted);
-      } catch (e) { console.error('Chat load error:', e); }
-    } catch (e) {
-      console.error(e);
-      navigate('/dashboard');
-    } finally {
-      setLoading(false);
-    }
+        setMessages(history.map(m => ({ user: m.username, text: m.text, time: new Date(m.created_at).toLocaleTimeString(), isRoll: m.is_roll })));
+      } catch (e) {}
+    } catch (e) { navigate('/dashboard'); }
+    finally { setLoading(false); }
   };
 
   const refreshCharacter = async () => {
-    if (character?.id) {
-      const updated = await api.getCharacter(character.id);
-      setCharacter(updated);
-    }
+    if (character?.id) { const updated = await api.getCharacter(character.id); setCharacter(updated); }
   };
 
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
-    const text = input.trim();
-    setInput('');
-    try {
-      await api.sendChatMessage(id, text, false);
-    } catch (err) {
-      console.error('Send message error:', err);
-      addMessage({ user: user.username, text, time: new Date().toLocaleTimeString() });
-    }
+    const text = input.trim(); setInput('');
+    try { await api.sendChatMessage(id, text, false); }
+    catch (err) { addMessage({ user: user.username, text, time: new Date().toLocaleTimeString() }); }
   };
 
   const rollDice = async () => {
     const match = input.match(/\/r\s+(\d+)d(\d+)(?:\s*\+\s*(\d+))?/i);
-    if (!match) {
-      addMessage({ user: 'Система', text: 'Формат: /r XdY + Z', time: new Date().toLocaleTimeString() });
-      return;
-    }
-    const count = parseInt(match[1]);
-    const sides = parseInt(match[2]);
-    const mod = parseInt(match[3] || '0');
+    if (!match) { addMessage({ user: 'Система', text: 'Формат: /r XdY + Z', time: new Date().toLocaleTimeString() }); return; }
+    const count = parseInt(match[1]), sides = parseInt(match[2]), mod = parseInt(match[3] || '0');
     const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1);
     const sum = rolls.reduce((a, b) => a + b, 0) + mod;
     const formula = `${count}d${sides}${mod ? ' + ' + mod : ''} = ${sum}`;
-
     setInput('');
-    try {
-      await api.sendChatMessage(id, `🎲 ${formula}`, true);
-    } catch (e) { console.error(e); }
-
-    if (socketRef.current && campaign) {
-      socketRef.current.emit('dice_roll', {
-        campaignId: id, userId: user.id, username: user.username,
-        formula, sum, hidden: hiddenMode && isMaster,
-      });
-    }
+    try { await api.sendChatMessage(id, `🎲 ${formula}`, true); } catch (e) {}
+    if (socketRef.current) socketRef.current.emit('dice_roll', { campaignId: id, userId: user.id, username: user.username, formula, sum, hidden: hiddenMode && isMaster });
   };
 
   const rollSkill = async (skillName) => {
     if (!character) return;
     try {
       const result = await api.diceAuto(character.id, skillName);
-      try {
-        await api.sendChatMessage(id, `🎲 [${skillName}] ${result.formula}`, true);
-      } catch (e) { console.error(e); }
-
-      if (socketRef.current && campaign) {
-        socketRef.current.emit('dice_roll', {
-          campaignId: id, userId: user.id, username: character.name,
-          skillName, formula: result.formula, sum: result.sum,
-          hidden: hiddenMode && isMaster,
-        });
-      }
-    } catch (err) {
-      addMessage({ user: 'Система', text: `Ошибка: ${err.message}`, time: new Date().toLocaleTimeString() });
-    }
+      try { await api.sendChatMessage(id, `🎲 [${skillName}] ${result.formula}`, true); } catch (e) {}
+      if (socketRef.current) socketRef.current.emit('dice_roll', { campaignId: id, userId: user.id, username: character.name, skillName, formula: result.formula, sum: result.sum, hidden: hiddenMode && isMaster });
+    } catch (err) { addMessage({ user: 'Система', text: `Ошибка: ${err.message}`, time: new Date().toLocaleTimeString() }); }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && input.startsWith('/r ')) {
-      e.preventDefault();
-      rollDice();
-    }
-  };
+  const handleKeyDown = (e) => { if (e.key === 'Enter' && input.startsWith('/r ')) { e.preventDefault(); rollDice(); } };
 
   if (loading) return <div className="min-h-screen bg-wasteland-900 flex items-center justify-center"><p className="text-wasteland-300 font-stylized">Загрузка...</p></div>;
   if (!campaign) return null;
@@ -237,10 +158,10 @@ export default function Campaign({ user }) {
       { key: 'notes', label: 'Заметки' },
       { key: 'handouts', label: 'Хендауты' },
       { key: 'sounds', label: 'Звук' },
-      { key: 'admin', label: 'БД' },
     ] : [
       { key: 'handouts', label: 'Раздача' },
     ]),
+    ...(isAdmin ? [{ key: 'admin', label: 'БД' }] : []),
   ];
 
   const formatTime = () => {
@@ -259,18 +180,12 @@ export default function Campaign({ user }) {
         </div>
         <div className="flex items-center gap-2">
           {isMaster && (
-            <button onClick={() => setHiddenMode(!hiddenMode)} className={`text-xs px-2 py-0.5 rounded ${hiddenMode ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>
-              {hiddenMode ? '🔒' : '👁'}
-            </button>
+            <button onClick={() => setHiddenMode(!hiddenMode)} className={`text-xs px-2 py-0.5 rounded ${hiddenMode ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>{hiddenMode ? '🔒' : '👁'}</button>
           )}
           <span className="text-wasteland-500 text-xs hidden sm:inline">Код: {campaign.invite_code}</span>
           {isMaster ? (
-            <TimeCounter
-              date={campaign.game_time_date || '2026-01-01'}
-              hours={campaign.game_time_hours || 12}
-              minutes={campaign.game_time_minutes || 0}
-              onChange={(d, h, m) => api.updateCampaignTime(id, { game_time_date: d, game_time_hours: h, game_time_minutes: m }).then(() => loadCampaign())}
-            />
+            <TimeCounter date={campaign.game_time_date || '2026-01-01'} hours={campaign.game_time_hours || 12} minutes={campaign.game_time_minutes || 0}
+              onChange={(d, h, m) => api.updateCampaignTime(id, { game_time_date: d, game_time_hours: h, game_time_minutes: m }).then(() => loadCampaign())} />
           ) : (
             <span className="text-xs text-wasteland-500">🕐 {formatTime()}</span>
           )}
@@ -281,11 +196,8 @@ export default function Campaign({ user }) {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="bg-wasteland-800 border-b border-wasteland-600 flex overflow-x-auto flex-shrink-0">
             {tabs.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex-shrink-0 px-3 py-2 text-xs md:text-sm md:px-4 ${activeTab === tab.key ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}
-              >
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                className={`flex-shrink-0 px-3 py-2 text-xs md:text-sm md:px-4 ${activeTab === tab.key ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>
                 {tab.label}
               </button>
             ))}
@@ -312,9 +224,7 @@ export default function Campaign({ user }) {
 
           {activeTab === 'character' && (
             <div className="flex-1 overflow-y-auto p-3 min-h-0">
-              {isMaster ? (
-                <MasterCharacterPanel campaignId={id} />
-              ) : (
+              {isMaster ? <MasterCharacterPanel campaignId={id} /> : (
                 <>
                   {!character && !showCreateChar && (
                     <div className="text-center mt-8">
@@ -322,60 +232,42 @@ export default function Campaign({ user }) {
                       <button onClick={() => setShowCreateChar(true)} className="bg-accent-orange text-wasteland-900 font-bold px-6 py-3 rounded hover:bg-orange-500 transition">Создать персонажа</button>
                     </div>
                   )}
-                  {showCreateChar && !character && (
-                    <CharacterCreator professions={professions} perks={perks} campaignId={id} onCreated={(char) => { setCharacter(char); setShowCreateChar(false); }} onCancel={() => setShowCreateChar(false)} />
-                  )}
-                  {character && (
-                    <CharacterSheet character={character} isMaster={false} onUpdate={async (params) => { await api.updateCharacterParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} />
-                  )}
+                  {showCreateChar && !character && <CharacterCreator professions={professions} perks={perks} campaignId={id} onCreated={(char) => { setCharacter(char); setShowCreateChar(false); }} onCancel={() => setShowCreateChar(false)} />}
+                  {character && <CharacterSheet character={character} isMaster={false} onUpdate={async (params) => { await api.updateCharacterParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} />}
                 </>
               )}
             </div>
           )}
 
           {activeTab === 'inventory' && !isMaster && character && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0">
-              <InventoryPanel character={character} onRefresh={refreshCharacter} />
-            </div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><InventoryPanel character={character} onRefresh={refreshCharacter} /></div>
           )}
           {activeTab === 'inventory' && !isMaster && !character && (
             <div className="flex-1 overflow-y-auto p-3 text-center text-wasteland-400 mt-8 min-h-0">Сначала создайте персонажа</div>
           )}
 
           {activeTab === 'scene' && (
-            <div className="flex-1 overflow-hidden min-h-0">
-              <ScenePanel campaignId={id} isMaster={isMaster} socketRef={socketRef} npcs={npcs} characters={allCharacters} />
-            </div>
+            <div className="flex-1 overflow-hidden min-h-0"><ScenePanel campaignId={id} isMaster={isMaster} socketRef={socketRef} npcs={npcs} characters={allCharacters} /></div>
           )}
 
           {activeTab === 'npcs' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0">
-              <NPCPanel campaignId={id} socketRef={socketRef} />
-            </div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><NPCPanel campaignId={id} socketRef={socketRef} /></div>
           )}
 
           {activeTab === 'notes' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0">
-              <MasterNotes campaignId={id} />
-            </div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><MasterNotes campaignId={id} /></div>
           )}
 
           {activeTab === 'handouts' && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0">
-              <HandoutsPanel campaignId={id} isMaster={isMaster} />
-            </div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><HandoutsPanel campaignId={id} isMaster={isMaster} /></div>
           )}
 
           {activeTab === 'sounds' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0">
-              <SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} />
-            </div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} /></div>
           )}
 
-          {activeTab === 'admin' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0">
-              <AdminPanel />
-            </div>
+          {activeTab === 'admin' && isAdmin && (
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><AdminPanel /></div>
           )}
         </div>
 
@@ -421,29 +313,18 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
 
   const togglePerk = (perk) => {
     const isSelected = selectedPerks.find(p => p.id === perk.id);
-    if (isSelected) {
-      setSelectedPerks(prev => prev.filter(p => p.id !== perk.id));
-      setBalance(b => b - perk.cost);
-    } else {
-      setSelectedPerks(prev => [...prev, perk]);
-      setBalance(b => b + perk.cost);
-    }
+    if (isSelected) { setSelectedPerks(prev => prev.filter(p => p.id !== perk.id)); setBalance(b => b - perk.cost); }
+    else { setSelectedPerks(prev => [...prev, perk]); setBalance(b => b + perk.cost); }
   };
 
   const handleCreate = async () => {
     if (!name.trim() || balance < 0) return;
     setLoading(true); setError('');
-    try {
-      const char = await api.createCharacter({ campaign_id: campaignId, name, profession_id: selectedProf.id, perk_ids: selectedPerks.map(p => p.id) });
-      onCreated(char);
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+    try { const char = await api.createCharacter({ campaign_id: campaignId, name, profession_id: selectedProf.id, perk_ids: selectedPerks.map(p => p.id) }); onCreated(char); }
+    catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
-  const getPerkTypeColor = (type) => {
-    if (type === 'positive') return 'text-accent-green';
-    if (type === 'negative') return 'text-accent-red';
-    return 'text-wasteland-300';
-  };
+  const getPerkTypeColor = (type) => type === 'positive' ? 'text-accent-green' : type === 'negative' ? 'text-accent-red' : 'text-wasteland-300';
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -503,28 +384,18 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
 
 function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
   const [editMode, setEditMode] = useState(false);
-  const [params, setParams] = useState({
-    food: character.food ?? 100, water: character.water ?? 100, stress: character.stress ?? 0,
-    game_time_date: character.game_time_date ?? '2026-01-01', game_time_hours: character.game_time_hours ?? 12, game_time_minutes: character.game_time_minutes ?? 0,
-    carry_weight_max: character.carry_weight_max ?? 50,
-  });
-
-  const handleSlider = (field, value) => setParams(prev => ({ ...prev, [field]: field === 'game_time_date' ? value : parseInt(value) }));
+  const [params, setParams] = useState({ food: character.food ?? 100, water: character.water ?? 100, stress: character.stress ?? 0 });
+  const handleSlider = (field, value) => setParams(prev => ({ ...prev, [field]: parseInt(value) }));
   const saveParams = async () => { await onUpdate(params); setEditMode(false); };
-
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
-        <div className="flex justify-between items-start">
-          <div><h2 className="text-xl font-stylized text-wasteland-100">{character.name}</h2><p className="text-accent-orange">{character.profession?.name}</p></div>
-        </div>
+        <div className="flex justify-between items-start"><div><h2 className="text-xl font-stylized text-wasteland-100">{character.name}</h2><p className="text-accent-orange">{character.profession?.name}</p></div></div>
       </div>
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-wasteland-300 font-stylized">Состояние</h3>
-          {isMaster && (
-            <button onClick={() => editMode ? saveParams() : setEditMode(true)} className={`text-xs px-3 py-1 rounded ${editMode ? 'bg-accent-green text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>{editMode ? 'Сохранить' : 'Изменить'}</button>
-          )}
+          {isMaster && <button onClick={() => editMode ? saveParams() : setEditMode(true)} className={`text-xs px-3 py-1 rounded ${editMode ? 'bg-accent-green text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>{editMode ? 'Сохранить' : 'Изменить'}</button>}
         </div>
         {[{ label: 'Еда', field: 'food', color: '#33cc33' },{ label: 'Вода', field: 'water', color: '#3399ff' },{ label: 'Стресс', field: 'stress', color: '#cc3333' }].map(({ label, field, color }) => (
           <div key={field} className="mb-3">
@@ -567,58 +438,39 @@ function TimeCounter({ date, hours, minutes, onChange }) {
 
   useEffect(() => {
     const nd = date || '2026-01-01';
-    setY(parseInt(nd.substring(0, 4)));
-    setMo(parseInt(nd.substring(5, 7)));
-    setD(parseInt(nd.substring(8, 10)));
-    setH(hours ?? 12);
-    setM(minutes ?? 0);
+    setY(parseInt(nd.substring(0, 4))); setMo(parseInt(nd.substring(5, 7))); setD(parseInt(nd.substring(8, 10)));
+    setH(hours ?? 12); setM(minutes ?? 0);
   }, [date, hours, minutes]);
 
-  const save = (newY, newMo, newD, newH, newM) => {
-    const month = Math.max(1, Math.min(12, newMo || 1));
-    const day = Math.max(1, Math.min(31, newD || 1));
-    const dateStr = `${newY}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const hour = Math.max(0, Math.min(23, newH ?? 0));
-    const minute = Math.max(0, Math.min(59, newM ?? 0));
-    onChange(dateStr, hour, minute);
+  const save = (ny, nmo, nd, nh, nm) => {
+    const month = Math.max(1, Math.min(12, nmo || 1));
+    const day = Math.max(1, Math.min(31, nd || 1));
+    onChange(`${ny}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`, Math.max(0, Math.min(23, nh ?? 0)), Math.max(0, Math.min(59, nm ?? 0)));
   };
-
-  const handleBlur = () => save(y, mo, d, h, m);
 
   const addHours = (n) => {
     let nh = h + n, nd = d, nmo = mo, ny = y;
-    if (nh >= 24) {
-      const daysAdd = Math.floor(nh / 24);
-      nh = nh % 24;
-      const newDate = new Date(y, mo - 1, d + daysAdd);
-      ny = newDate.getFullYear(); nmo = newDate.getMonth() + 1; nd = newDate.getDate();
-    } else if (nh < 0) {
-      let totalHours = h + n;
-      const totalDays = Math.floor(totalHours / 24);
-      nh = ((totalHours % 24) + 24) % 24;
-      const newDate = new Date(y, mo - 1, d + totalDays);
-      ny = newDate.getFullYear(); nmo = newDate.getMonth() + 1; nd = newDate.getDate();
-    }
-    setY(ny); setMo(nmo); setD(nd); setH(nh);
-    save(ny, nmo, nd, nh, m);
+    if (nh >= 24) { const add = Math.floor(nh/24); nh %= 24; const dt = new Date(y, mo-1, d+add); ny = dt.getFullYear(); nmo = dt.getMonth()+1; nd = dt.getDate(); }
+    else if (nh < 0) { const total = h + n; const add = Math.floor(total/24); nh = ((total%24)+24)%24; const dt = new Date(y, mo-1, d+add); ny = dt.getFullYear(); nmo = dt.getMonth()+1; nd = dt.getDate(); }
+    setY(ny); setMo(nmo); setD(nd); setH(nh); save(ny, nmo, nd, nh, m);
   };
 
   return (
     <div className="flex items-center gap-1 text-xs">
-      <button onClick={() => addHours(-1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="-1 час">−</button>
+      <button onClick={() => addHours(-1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300">−</button>
       <div className="flex items-center gap-0.5">
-        <input type="number" value={y} onChange={e => setY(parseInt(e.target.value) || 2026)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-14 text-center" min="2000" max="2100" />
+        <input type="number" value={y} onChange={e => setY(parseInt(e.target.value)||2026)} onBlur={() => save(y,mo,d,h,m)} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-14 text-center" min="2000" max="2100" />
         <span className="text-wasteland-500">-</span>
-        <input type="number" value={mo} onChange={e => setMo(parseInt(e.target.value) || 1)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="1" max="12" />
+        <input type="number" value={mo} onChange={e => setMo(parseInt(e.target.value)||1)} onBlur={() => save(y,mo,d,h,m)} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="1" max="12" />
         <span className="text-wasteland-500">-</span>
-        <input type="number" value={d} onChange={e => setD(parseInt(e.target.value) || 1)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="1" max="31" />
+        <input type="number" value={d} onChange={e => setD(parseInt(e.target.value)||1)} onBlur={() => save(y,mo,d,h,m)} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="1" max="31" />
       </div>
       <div className="flex items-center gap-0.5 ml-1">
-        <input type="number" value={h} onChange={e => setH(parseInt(e.target.value) || 0)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="0" max="23" />
+        <input type="number" value={h} onChange={e => setH(parseInt(e.target.value)||0)} onBlur={() => save(y,mo,d,h,m)} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="0" max="23" />
         <span className="text-wasteland-500">:</span>
-        <input type="number" value={m} onChange={e => setM(parseInt(e.target.value) || 0)} onBlur={handleBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="0" max="59" />
+        <input type="number" value={m} onChange={e => setM(parseInt(e.target.value)||0)} onBlur={() => save(y,mo,d,h,m)} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 w-10 text-center" min="0" max="59" />
       </div>
-      <button onClick={() => addHours(1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="+1 час">+</button>
+      <button onClick={() => addHours(1)} className="bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300">+</button>
     </div>
   );
 }
