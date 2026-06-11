@@ -3,7 +3,6 @@ import { api } from '../api';
 
 export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, characters }) {
   const [sceneType, setSceneType] = useState('local');
-  const [scene, setScene] = useState(null);
   const [backgrounds, setBackgrounds] = useState([]);
   const [showBgLibrary, setShowBgLibrary] = useState(false);
   const [bgUrlInput, setBgUrlInput] = useState('');
@@ -18,25 +17,30 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const bgImageRef = useRef(null);
   const isDrawing = useRef(false);
   const draggedToken = useRef(null);
   const dragOffset = useRef({ x: 0, y: 0 });
-  const lastTouchTime = useRef(0);
   const drawingsRef = useRef([]);
 
+  // Загрузка сцены
   const loadScene = useCallback(async () => {
     try {
       const data = await api.getScenes(campaignId, sceneType);
       if (data && data.length > 0) {
         const s = data[0];
-        setScene(s);
         setTokens(s.tokens || []);
         drawingsRef.current = s.drawings || [];
-        if (s.background_url) setSelectedBg({ url: s.background_url, name: '' });
-        else setSelectedBg(null);
-        redrawCanvas(s.drawings || []);
+        if (s.background_url) {
+          setSelectedBg({ url: s.background_url, name: '' });
+        } else {
+          setSelectedBg(null);
+        }
+        redrawAll();
       } else {
-        setScene(null); setTokens([]); drawingsRef.current = []; setSelectedBg(null);
+        setTokens([]);
+        drawingsRef.current = [];
+        setSelectedBg(null);
         clearCanvas();
       }
     } catch (e) { console.error(e); }
@@ -48,6 +52,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
   useEffect(() => { loadScene(); loadBackgrounds(); }, [sceneType, campaignId]);
 
+  // WebSocket слушатели
   useEffect(() => {
     if (!socketRef?.current) return;
     const socket = socketRef.current;
@@ -60,6 +65,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     return () => { socket.off('scene_updated', h1); socket.off('scene_token_moved', h2); };
   }, [campaignId, sceneType, socketRef]);
 
+  // Очистка холста
   const clearCanvas = () => {
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d');
@@ -67,27 +73,43 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  const redrawCanvas = (drawings) => {
-    if (!canvasRef.current || !selectedBg?.url) return;
+  // Перерисовка всего
+  const redrawAll = () => {
+    if (!canvasRef.current || !bgImageRef.current) return;
     const canvas = canvasRef.current;
+    const img = bgImageRef.current;
+    
+    // Устанавливаем размер холста по изображению
+    canvas.width = img.naturalWidth || img.width || 800;
+    canvas.height = img.naturalHeight || img.height || 600;
+    
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const d of drawings) {
-      if (d.tool === 'pencil' && d.points?.length > 0) {
-        ctx.strokeStyle = d.color || '#ff0000';
-        ctx.lineWidth = d.lineWidth || 3;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(d.points[0].x, d.points[0].y);
-        for (let i = 1; i < d.points.length; i++) {
-          ctx.lineTo(d.points[i].x, d.points[i].y);
-        }
-        ctx.stroke();
-      }
+    
+    // Рисуем сохранённые рисунки
+    for (const d of drawingsRef.current) {
+      drawShape(ctx, d);
     }
   };
 
+  // Отрисовка одной фигуры
+  const drawShape = (ctx, d) => {
+    if (d.tool === 'pencil' && d.points?.length > 0) {
+      ctx.strokeStyle = d.color || '#ff0000';
+      ctx.lineWidth = d.lineWidth || 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.beginPath();
+      ctx.moveTo(d.points[0].x, d.points[0].y);
+      for (let i = 1; i < d.points.length; i++) {
+        ctx.lineTo(d.points[i].x, d.points[i].y);
+      }
+      ctx.stroke();
+    }
+  };
+
+  // Сохранение сцены
   const saveScene = async () => {
     setError('');
     try {
@@ -104,53 +126,61 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     } catch (e) { setError(e.message); }
   };
 
-  // Инициализация холста при смене фона
+  // Загрузка изображения
   useEffect(() => {
-    if (!selectedBg?.url) return;
+    if (!selectedBg?.url) {
+      clearCanvas();
+      return;
+    }
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const w = img.naturalWidth || 800;
-      const h = img.naturalHeight || 600;
-      if (canvasRef.current) {
-        canvasRef.current.width = w;
-        canvasRef.current.height = h;
-        redrawCanvas(drawingsRef.current);
-      }
+      bgImageRef.current = img;
+      redrawAll();
+    };
+    img.onerror = () => {
+      setError('Не удалось загрузить изображение');
     };
     img.src = selectedBg.url;
   }, [selectedBg]);
 
-  const getEventPos = (e) => {
+  // Получение координат относительно холста
+  const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const scaleX = canvas.width / (rect.width || 1);
-    const scaleY = canvas.height / (rect.height || 1);
+    
+    // Масштабирование координат
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
     };
   };
 
+  // Получение координат для токенов (относительно контейнера)
   const getTokenPos = (e) => {
     const container = containerRef.current;
-    if (!container) return { x: 0, y: 0 };
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return { x: 0, y: 0 };
     const rect = container.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const img = container.querySelector('img');
-    const scaleX = (img?.naturalWidth || 800) / (rect.width || 1);
-    const scaleY = (img?.naturalHeight || 600) / (rect.height || 1);
+    
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
     };
   };
 
-  // Рисование карандашом
+  // Рисование
   const currentPath = useRef([]);
 
   const startDraw = (e) => {
@@ -158,7 +188,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (tool !== 'pencil' && tool !== 'eraser') return;
     e.preventDefault();
 
-    const pos = getEventPos(e);
+    const pos = getCanvasPos(e);
     isDrawing.current = true;
     currentPath.current = [{ x: pos.x, y: pos.y }];
 
@@ -166,7 +196,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.strokeStyle = tool === 'eraser' ? '#000000' : color;
-    ctx.lineWidth = tool === 'eraser' ? lineWidth * 3 : lineWidth;
+    ctx.lineWidth = tool === 'eraser' ? lineWidth * 4 : lineWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
@@ -179,7 +209,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (tool !== 'pencil' && tool !== 'eraser') return;
     e.preventDefault();
 
-    const pos = getEventPos(e);
+    const pos = getCanvasPos(e);
     currentPath.current.push({ x: pos.x, y: pos.y });
 
     const canvas = canvasRef.current;
@@ -189,10 +219,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     ctx.stroke();
   };
 
-  const endDraw = (e) => {
+  const endDraw = () => {
     if (!isMaster || !isDrawing.current) return;
     isDrawing.current = false;
 
+    // Сохраняем рисунок (только для карандаша)
     if (currentPath.current.length > 0 && tool === 'pencil') {
       drawingsRef.current = [...drawingsRef.current, {
         tool: 'pencil',
@@ -201,25 +232,30 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         points: currentPath.current,
       }];
     }
-
-    // Для ластика: удаляем рисунки, которые были задеты
+    
+    // Для ластика: удаляем задеты рисунки
     if (tool === 'eraser' && currentPath.current.length > 0) {
       const eraserPath = currentPath.current;
       drawingsRef.current = drawingsRef.current.filter(d => {
         if (d.tool !== 'pencil' || !d.points?.length) return true;
-        // Проверяем пересечение
-        return !d.points.some(p => {
-          return eraserPath.some(ep => {
-            const dx = p.x - ep.x;
-            const dy = p.y - ep.y;
-            return Math.sqrt(dx * dx + dy * dy) < (lineWidth * 3 + (d.lineWidth || 3));
-          });
-        });
+        // Проверяем, есть ли пересечение
+        for (const dp of d.points) {
+          for (const ep of eraserPath) {
+            const dx = dp.x - ep.x;
+            const dy = dp.y - ep.y;
+            if (Math.sqrt(dx * dx + dy * dy) < (lineWidth * 4 + (d.lineWidth || 3))) {
+              return false; // Удаляем рисунок
+            }
+          }
+        }
+        return true;
       });
-      redrawCanvas(drawingsRef.current);
+      // Перерисовываем
+      redrawAll();
     }
 
     currentPath.current = [];
+    // Восстанавливаем композит
     if (canvasRef.current) {
       canvasRef.current.getContext('2d').globalCompositeOperation = 'source-over';
     }
@@ -247,12 +283,13 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   // Токены персонажей/NPC
   const addToken = (type, refId, name, colorVal) => {
     if (!isMaster) return;
-    const img = containerRef.current?.querySelector('img');
-    const w = img?.naturalWidth || 800;
-    const h = img?.naturalHeight || 600;
+    const canvas = canvasRef.current;
+    const w = canvas?.width || 800;
+    const h = canvas?.height || 600;
     setTokens(prev => [...prev, {
       id: `${type}_${refId}_${Date.now()}`,
-      type, ref_id: refId,
+      type,
+      ref_id: refId,
       label: (name || '?').substring(0, 2).toUpperCase(),
       color: colorVal,
       x: w * 0.3 + Math.random() * w * 0.4,
@@ -269,13 +306,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!isMaster || tool !== 'select') return;
     e.preventDefault();
     e.stopPropagation();
-    const now = Date.now();
-    if (now - lastTouchTime.current < 300) {
-      removeToken(tokenId);
-      lastTouchTime.current = 0;
-      return;
-    }
-    lastTouchTime.current = now;
+    
     draggedToken.current = tokenId;
     const pos = getTokenPos(e);
     const token = tokens.find(t => t.id === tokenId);
@@ -289,7 +320,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     e.preventDefault();
     const pos = getTokenPos(e);
     setTokens(prev => prev.map(t =>
-      t.id === draggedToken.current ? { ...t, x: pos.x - dragOffset.current.x, y: pos.y - dragOffset.current.y } : t
+      t.id === draggedToken.current ? {
+        ...t,
+        x: pos.x - dragOffset.current.x,
+        y: pos.y - dragOffset.current.y
+      } : t
     ));
   };
 
@@ -298,7 +333,9 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       const token = tokens.find(t => t.id === draggedToken.current);
       if (token) {
         socketRef.current.emit('scene_token_move', {
-          campaignId, sceneType, tokenId: token.id,
+          campaignId,
+          sceneType,
+          tokenId: token.id,
           tokens: tokens.map(t => t.id === token.id ? token : t)
         });
       }
@@ -370,46 +407,77 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         ref={containerRef}
         className="flex-1 overflow-auto bg-wasteland-800"
         style={{ minHeight: '300px', touchAction: isMaster ? 'none' : 'auto' }}
-        onMouseDown={(e) => { if (tool === 'note') addNoteToken(e); else startDraw(e); }}
+        onMouseDown={(e) => {
+          if (tool === 'note') addNoteToken(e);
+          else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
+        }}
         onMouseMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
-        onMouseUp={(e) => { endDraw(e); endTokenDrag(); }}
-        onMouseLeave={(e) => { endDraw(e); endTokenDrag(); }}
-        onTouchStart={(e) => { if (tool === 'note') addNoteToken(e); else startDraw(e); }}
+        onMouseUp={() => { endDraw(); endTokenDrag(); }}
+        onMouseLeave={() => { endDraw(); endTokenDrag(); }}
+        onTouchStart={(e) => {
+          if (tool === 'note') addNoteToken(e);
+          else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
+        }}
         onTouchMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
-        onTouchEnd={(e) => { endDraw(e); endTokenDrag(); }}
+        onTouchEnd={() => { endDraw(); endTokenDrag(); }}
       >
-        {selectedBg ? (
-          <div className="relative inline-block min-w-full min-h-full">
-            <img src={selectedBg.url} alt="Фон" className="block max-w-none" draggable={false} />
-            <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: ['pencil','eraser'].includes(tool) ? 'auto' : 'none' }} />
-            {/* Токены */}
-            {tokens.map(token => (
+        <div className="relative inline-block min-w-full min-h-full">
+          {selectedBg && (
+            <img
+              ref={bgImageRef}
+              src={selectedBg.url}
+              alt="Фон"
+              className="block max-w-none"
+              draggable={false}
+            />
+          )}
+          {!selectedBg && (
+            <div className="flex items-center justify-center h-64 text-wasteland-500 text-sm">Выберите фон</div>
+          )}
+          <canvas
+            ref={canvasRef}
+            className="absolute top-0 left-0"
+            style={{ pointerEvents: ['pencil', 'eraser'].includes(tool) ? 'auto' : 'none' }}
+          />
+          {/* Токены */}
+          {tokens.map(token => {
+            const canvas = canvasRef.current;
+            const scaleX = canvas ? canvas.width / (containerRef.current?.getBoundingClientRect().width || 800) : 1;
+            const scaleY = canvas ? canvas.height / (containerRef.current?.getBoundingClientRect().height || 600) : 1;
+
+            return (
               <div
                 key={token.id}
                 onMouseDown={(e) => startTokenDrag(e, token.id)}
                 onTouchStart={(e) => startTokenDrag(e, token.id)}
                 onClick={() => { if (token.type === 'note' && token.note) setSelectedNote(token); }}
                 style={{
-                  position: 'absolute', left: token.x - 18, top: token.y - 18,
-                  width: 36, height: 36, borderRadius: '50%',
+                  position: 'absolute',
+                  left: token.x / scaleX - 18,
+                  top: token.y / scaleY - 18,
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
                   backgroundColor: token.color,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 'bold', color: token.type === 'note' ? '#000' : 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold',
+                  color: token.type === 'note' ? '#000' : 'white',
                   fontSize: token.type === 'note' ? '16px' : '12px',
                   border: '2px solid white',
                   cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
-                  zIndex: 30, userSelect: 'none',
+                  zIndex: 30,
+                  userSelect: 'none',
                   boxShadow: '0 0 4px rgba(0,0,0,0.5)',
                   touchAction: 'none',
                 }}
               >
                 {token.label}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-wasteland-500 text-sm">Выберите фон</div>
-        )}
+            );
+          })}
+        </div>
       </div>
 
       {/* Нижняя панель токенов */}
