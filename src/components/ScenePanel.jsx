@@ -18,12 +18,12 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const [brightness, setBrightness] = useState(100);
   const [showDrawings, setShowDrawings] = useState(true);
   const [selectedNote, setSelectedNote] = useState(null);
-  const [contextToken, setContextToken] = useState(null);
-  const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState(null);
   const [snapshots, setSnapshots] = useState([]);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [portalEdit, setPortalEdit] = useState(null);
 
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -49,7 +49,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         } else {
           setSelectedBg(null);
         }
-        // Инициализируем историю
         const initialState = { tokens: sceneTokens, drawings: s.drawings || [], portals: s.portals || [] };
         setHistory([initialState]);
         setHistoryIndex(0);
@@ -138,24 +137,16 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  // Горячие клавиши
   useEffect(() => {
     const handler = (e) => {
       if (!isMaster) return;
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-        e.preventDefault();
-        redo();
-      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isMaster, historyIndex, history]);
 
-  // Очистка холста
   const clearCanvas = () => {
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d');
@@ -171,11 +162,8 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     canvas.height = img.naturalHeight || img.height || 600;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     if (showDrawings) {
-      for (const d of drawingsRef.current) {
-        drawShape(ctx, d);
-      }
+      for (const d of drawingsRef.current) drawShape(ctx, d);
     }
   };
 
@@ -188,14 +176,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       ctx.globalCompositeOperation = 'source-over';
       ctx.beginPath();
       ctx.moveTo(d.points[0].x, d.points[0].y);
-      for (let i = 1; i < d.points.length; i++) {
-        ctx.lineTo(d.points[i].x, d.points[i].y);
-      }
+      for (let i = 1; i < d.points.length; i++) ctx.lineTo(d.points[i].x, d.points[i].y);
       ctx.stroke();
     }
   };
 
-  // Сохранение
   const saveScene = async () => {
     setError('');
     try {
@@ -225,26 +210,20 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     setTokens(newTokens);
     const newState = { tokens: newTokens, drawings: drawingsRef.current, portals: portalsRef.current };
     pushHistory(newState);
-    if (socketRef?.current) {
-      socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
-    }
+    if (socketRef?.current) socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
   };
 
   const syncDrawings = () => {
     const newState = { tokens, drawings: drawingsRef.current, portals: portalsRef.current };
     pushHistory(newState);
-    if (socketRef?.current) {
-      socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
-    }
+    if (socketRef?.current) socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
   };
 
   const syncPortals = (newPortals) => {
     portalsRef.current = newPortals;
     const newState = { tokens, drawings: drawingsRef.current, portals: newPortals };
     pushHistory(newState);
-    if (socketRef?.current) {
-      socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
-    }
+    if (socketRef?.current) socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
   };
 
   // Снапшоты
@@ -280,7 +259,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     localStorage.setItem(`snapshots_${campaignId}_${sceneType}`, JSON.stringify(newSnapshots));
   };
 
-  // Загружаем снапшоты из localStorage
   useEffect(() => {
     try {
       const saved = localStorage.getItem(`snapshots_${campaignId}_${sceneType}`);
@@ -288,59 +266,55 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     } catch (e) {}
   }, [campaignId, sceneType]);
 
-  // Загрузка изображения
   useEffect(() => {
-    if (!selectedBg?.url) {
-      clearCanvas();
-      return;
-    }
+    if (!selectedBg?.url) { clearCanvas(); return; }
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      bgImageRef.current = img;
-      redrawAll();
-    };
+    img.onload = () => { bgImageRef.current = img; redrawAll(); };
     img.onerror = () => setError('Не удалось загрузить изображение');
     img.src = selectedBg.url;
   }, [selectedBg]);
 
-  // Зум
   const handleWheel = (e) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     setZoom(prev => Math.max(0.3, Math.min(3, prev + delta)));
   };
 
-  // Координаты
   const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    const scaleX = canvas.width / (rect.width / zoom);
+    const scaleY = canvas.height / (rect.height / zoom);
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
   };
 
   const getTokenPos = (e) => {
-    const container = containerRef.current;
     const canvas = canvasRef.current;
-    if (!container || !canvas) return { x: 0, y: 0 };
+    const container = containerRef.current;
+    if (!canvas || !container) return { x: 0, y: 0 };
     const rect = container.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
-    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
   };
 
   // Рисование
   const currentPath = useRef([]);
 
   const startDraw = (e) => {
-    if (!isMaster) return;
-    if (tool !== 'pencil' && tool !== 'eraser') return;
+    if (!isMaster || (tool !== 'pencil' && tool !== 'eraser')) return;
     e.preventDefault();
     const pos = getCanvasPos(e);
     isDrawing.current = true;
@@ -358,8 +332,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   };
 
   const moveDraw = (e) => {
-    if (!isMaster || !isDrawing.current) return;
-    if (tool !== 'pencil' && tool !== 'eraser') return;
+    if (!isMaster || !isDrawing.current || (tool !== 'pencil' && tool !== 'eraser')) return;
     e.preventDefault();
     const pos = getCanvasPos(e);
     currentPath.current.push({ x: pos.x, y: pos.y });
@@ -378,7 +351,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       drawingsRef.current = [...drawingsRef.current, { tool: 'pencil', color, lineWidth, points: currentPath.current }];
       syncDrawings();
     }
-
     if (tool === 'eraser' && currentPath.current.length > 0) {
       const eraserPath = currentPath.current;
       drawingsRef.current = drawingsRef.current.filter(d => {
@@ -393,11 +365,8 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       redrawAll();
       syncDrawings();
     }
-
     currentPath.current = [];
-    if (canvasRef.current) {
-      canvasRef.current.getContext('2d').globalCompositeOperation = 'source-over';
-    }
+    if (canvasRef.current) canvasRef.current.getContext('2d').globalCompositeOperation = 'source-over';
   };
 
   // Порталы
@@ -405,14 +374,18 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!isMaster || tool !== 'portal') return;
     e.preventDefault();
     const pos = getTokenPos(e);
+    const portalName = prompt('Имя/ID портала:', 'Портал');
+    if (!portalName) return;
     const targetScene = prompt('Тип сцены для перехода (local/global):', sceneType === 'local' ? 'global' : 'local');
     if (!targetScene || !['local', 'global'].includes(targetScene)) return;
-    const label = prompt('Название портала:', 'Портал');
-    if (!label) return;
+    const linkName = prompt('Имя связанного портала (на целевой сцене):', portalName);
+    if (!linkName) return;
+
     const newPortal = {
       id: `portal_${Date.now()}`,
-      label,
+      name: portalName,
       targetScene,
+      linkName,
       x: pos.x,
       y: pos.y,
       visible: true,
@@ -421,16 +394,27 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     syncPortals(newPortals);
   };
 
-  const togglePortalVisibility = (portalId) => {
+  const updatePortal = (portalId, updates) => {
     const newPortals = portalsRef.current.map(p =>
-      p.id === portalId ? { ...p, visible: !p.visible } : p
+      p.id === portalId ? { ...p, ...updates } : p
     );
     syncPortals(newPortals);
+    setPortalEdit(null);
   };
 
   const removePortal = (portalId) => {
     const newPortals = portalsRef.current.filter(p => p.id !== portalId);
     syncPortals(newPortals);
+    setPortalEdit(null);
+  };
+
+  const handlePortalClick = (portal) => {
+    if (!portal.targetScene || portal.targetScene === sceneType) return;
+    
+    // Ищем связанный портал на целевой сцене
+    setSceneType(portal.targetScene);
+    // После переключения сцены, когда она загрузится, можно центрироваться на связанном портале
+    // Но это требует ожидания загрузки — пока просто переключаем
   };
 
   // Заметки
@@ -440,7 +424,16 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const pos = getTokenPos(e);
     const text = prompt('Текст заметки:');
     if (text) {
-      const newToken = { id: `note_${Date.now()}`, type: 'note', label: '📝', color: '#ffcc00', x: pos.x, y: pos.y, note: text, hidden: false };
+      const newToken = {
+        id: `note_${Date.now()}`,
+        type: 'note',
+        label: '📝',
+        color: '#ffcc00',
+        x: pos.x,
+        y: pos.y,
+        note: text,
+        hidden: false,
+      };
       syncTokens([...tokens, newToken]);
     }
   };
@@ -465,9 +458,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   };
 
   const toggleTokenVisibility = (tokenId) => {
-    const newTokens = tokens.map(t =>
-      t.id === tokenId ? { ...t, hidden: !t.hidden } : t
-    );
+    const newTokens = tokens.map(t => t.id === tokenId ? { ...t, hidden: !t.hidden } : t);
     syncTokens(newTokens);
   };
 
@@ -475,20 +466,31 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     syncTokens(tokens.filter(t => t.id !== tokenId));
   };
 
-  // Контекстное меню токена
+  // Контекстное меню
   const handleTokenContext = (e, token) => {
     if (!isMaster) return;
     e.preventDefault();
-    const container = containerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    setContextToken(token);
-    setContextPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    setContextMenu({
+      type: 'token',
+      token,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  const handlePortalContext = (e, portal) => {
+    if (!isMaster) return;
+    e.preventDefault();
+    setContextMenu({
+      type: 'portal',
+      portal,
+      x: e.clientX,
+      y: e.clientY,
+    });
   };
 
   const handleRollFromToken = async (token, skillName, modifier) => {
     try {
-      const name = token.type === 'npc' ? token.label : token.label;
       const d20 = Math.floor(Math.random() * 20) + 1;
       const sum = d20 + modifier;
       if (socketRef?.current) {
@@ -503,10 +505,9 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         });
       }
     } catch (e) { console.error(e); }
-    setContextToken(null);
+    setContextMenu(null);
   };
 
-  // Токены для контекстного меню
   const getTokenSkills = (token) => {
     if (token.type === 'npc') {
       const npc = npcs?.find(n => n.id === token.ref_id);
@@ -521,15 +522,13 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
   const startTokenDrag = (e, tokenId) => {
     if (!isMaster || tool !== 'select') return;
-    if (e.button === 2) return; // Правый клик — контекстное меню
+    if (e.button === 2) return;
     e.preventDefault();
     e.stopPropagation();
     draggedToken.current = tokenId;
     const pos = getTokenPos(e);
     const token = tokens.find(t => t.id === tokenId);
-    if (token) {
-      dragOffset.current = { x: pos.x - token.x, y: pos.y - token.y };
-    }
+    if (token) dragOffset.current = { x: pos.x - token.x, y: pos.y - token.y };
   };
 
   const moveTokenDrag = (e) => {
@@ -545,9 +544,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (draggedToken.current) {
       const newState = { tokens, drawings: drawingsRef.current, portals: portalsRef.current };
       pushHistory(newState);
-      if (socketRef?.current) {
-        socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
-      }
+      if (socketRef?.current) socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
     }
     draggedToken.current = null;
   };
@@ -557,21 +554,27 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     ...(npcs || []).filter(n => n.visibility === 'combat').map(n => ({ type: 'npc', id: n.id, name: n.name, color: '#cc3333' })),
   ];
 
-  // Стиль токена с учётом зума
-  const getTokenStyle = (token) => {
+  // Стили с учётом зума
+  const getScaledStyle = (x, y, size, extra = {}) => {
     const canvas = canvasRef.current;
     if (!canvas || !containerRef.current) return { display: 'none' };
     const rect = containerRef.current.getBoundingClientRect();
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
-    const size = tokenSize / zoom;
+    const scaledSize = size / zoom;
 
     return {
       position: 'absolute',
-      left: token.x / scaleX - size / 2,
-      top: token.y / scaleY - size / 2,
-      width: size,
-      height: size,
+      left: x / scaleX - scaledSize / 2,
+      top: y / scaleY - scaledSize / 2,
+      width: scaledSize,
+      height: scaledSize,
+      ...extra,
+    };
+  };
+
+  const getTokenStyle = (token) => {
+    return getScaledStyle(token.x, token.y, tokenSize, {
       borderRadius: token.type === 'note' ? '30%' : '50%',
       backgroundColor: token.color,
       display: 'flex',
@@ -579,7 +582,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       justifyContent: 'center',
       fontWeight: 'bold',
       color: token.type === 'note' ? '#000' : 'white',
-      fontSize: Math.max(8, size * 0.35),
+      fontSize: Math.max(8, (tokenSize / zoom) * 0.35),
       border: `2px solid ${token.hidden ? '#ff0000' : 'white'}`,
       opacity: token.hidden ? 0.4 : 1,
       cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
@@ -587,37 +590,29 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       userSelect: 'none',
       boxShadow: '0 0 4px rgba(0,0,0,0.5)',
       touchAction: 'none',
-    };
+    });
   };
 
-  // Стиль портала
   const getPortalStyle = (portal) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !containerRef.current) return { display: 'none' };
-    const rect = containerRef.current.getBoundingClientRect();
-    const scaleX = canvas.width / (rect.width / zoom);
-    const scaleY = canvas.height / (rect.height / zoom);
-    const size = 30 / zoom;
-
-    return {
-      position: 'absolute',
-      left: portal.x / scaleX - size / 2,
-      top: portal.y / scaleY - size / 2,
-      width: size,
-      height: size,
+    const size = 34;
+    return getScaledStyle(portal.x, portal.y, size, {
       borderRadius: '50%',
       background: 'radial-gradient(circle, rgba(100,100,255,0.8), rgba(50,50,150,0.4))',
       border: '2px dashed #6666ff',
-      display: portal.visible || isMaster ? 'flex' : 'none',
+      display: (portal.visible || isMaster) ? 'flex' : 'none',
       alignItems: 'center',
       justifyContent: 'center',
       color: 'white',
-      fontSize: Math.max(6, size * 0.3),
+      fontSize: Math.max(6, (size / zoom) * 0.25),
       cursor: 'pointer',
       zIndex: 25,
       userSelect: 'none',
       opacity: portal.visible ? 0.8 : 0.3,
-    };
+      textAlign: 'center',
+      overflow: 'hidden',
+      wordBreak: 'break-all',
+      lineHeight: 1.1,
+    });
   };
 
   return (
@@ -641,15 +636,15 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             {(tool === 'pencil' || tool === 'eraser') && (
               <>
                 {tool === 'pencil' && <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-5 h-5 rounded cursor-pointer" />}
-                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" title="Толщина" />
+                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" />
               </>
             )}
-            <button onClick={() => setShowDrawings(!showDrawings)} className={`text-xs px-2 py-1 rounded ${showDrawings ? 'bg-wasteland-600 text-wasteland-300' : 'bg-wasteland-800 text-wasteland-500'}`} title="Слой рисунков">
+            <button onClick={() => setShowDrawings(!showDrawings)} className={`text-xs px-2 py-1 rounded ${showDrawings ? 'bg-wasteland-600 text-wasteland-300' : 'bg-wasteland-800 text-wasteland-500'}`}>
               {showDrawings ? '📐' : '📐‍🗑️'}
             </button>
-            <button onClick={undo} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="Отменить (Ctrl+Z)">↩</button>
-            <button onClick={redo} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="Повторить (Ctrl+Y)">↪</button>
-            <button onClick={takeSnapshot} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="Снапшот">📸</button>
+            <button onClick={undo} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300">↩</button>
+            <button onClick={redo} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300">↪</button>
+            <button onClick={takeSnapshot} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300">📸</button>
             <button onClick={() => setShowSnapshots(!showSnapshots)} className={`text-xs px-1.5 py-0.5 rounded ${showSnapshots ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
               📋{snapshots.length > 0 ? `(${snapshots.length})` : ''}
             </button>
@@ -731,7 +726,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         }}
         onTouchMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
         onTouchEnd={() => { endDraw(); endTokenDrag(); }}
-        onClick={() => setContextToken(null)}
+        onClick={() => { setContextMenu(null); setPortalEdit(null); }}
       >
         <div className="relative inline-block" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', filter: `brightness(${brightness}%)` }}>
           {selectedBg && (
@@ -751,15 +746,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             <div
               key={portal.id}
               style={getPortalStyle(portal)}
-              onClick={() => { if (portal.targetScene && portal.targetScene !== sceneType) setSceneType(portal.targetScene); }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                if (isMaster) {
-                  if (confirm('Удалить портал?')) removePortal(portal.id);
-                }
-              }}
+              onClick={(e) => { e.stopPropagation(); handlePortalClick(portal); }}
+              onContextMenu={(e) => handlePortalContext(e, portal)}
+              title={`${portal.name} → ${portal.targetScene}:${portal.linkName}`}
             >
-              {portal.label?.substring(0, 2)}
+              {portal.name?.substring(0, 4)}
             </div>
           ))}
 
@@ -770,7 +761,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
               onMouseDown={(e) => startTokenDrag(e, token.id)}
               onTouchStart={(e) => startTokenDrag(e, token.id)}
               onContextMenu={(e) => handleTokenContext(e, token)}
-              onClick={() => { if (token.type === 'note' && token.note) setSelectedNote(token); }}
+              onClick={(e) => { e.stopPropagation(); if (token.type === 'note' && token.note) setSelectedNote(token); }}
               style={getTokenStyle(token)}
             >
               {token.label}
@@ -779,40 +770,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
               )}
             </div>
           ))}
-
-          {/* Контекстное меню */}
-          {contextToken && isMaster && (
-            <div
-              className="absolute bg-wasteland-800 border border-wasteland-600 rounded shadow-lg z-50 py-1 min-w-[120px]"
-              style={{ left: contextPos.x, top: contextPos.y }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">
-                {contextToken.label}
-              </div>
-              <button
-                onClick={() => { toggleTokenVisibility(contextToken.id); setContextToken(null); }}
-                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
-              >
-                {contextToken.hidden ? '👁 Показать' : '👁‍🗨 Скрыть'}
-              </button>
-              {getTokenSkills(contextToken).map((skill, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleRollFromToken(contextToken, skill.name, skill.modifier)}
-                  className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
-                >
-                  🎲 {skill.name} (+{skill.modifier})
-                </button>
-              ))}
-              <button
-                onClick={() => { removeToken(contextToken.id); setContextToken(null); }}
-                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red"
-              >
-                🗑️ Удалить
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -827,6 +784,133 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             </button>
           ))}
           <button onClick={() => syncTokens([])} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-0.5 rounded text-accent-red flex-shrink-0">✕</button>
+        </div>
+      )}
+
+      {/* Контекстное меню */}
+      {contextMenu && (
+        <div
+          className="fixed bg-wasteland-800 border border-wasteland-600 rounded shadow-lg z-50 py-1 min-w-[160px]"
+          style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 200) }}
+          onClick={e => e.stopPropagation()}
+        >
+          {contextMenu.type === 'token' && (
+            <>
+              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">
+                Токен: {contextMenu.token.label}
+              </div>
+              <button
+                onClick={() => { toggleTokenVisibility(contextMenu.token.id); setContextMenu(null); }}
+                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
+              >
+                {contextMenu.token.hidden ? '👁 Показать' : '👁‍🗨 Скрыть'}
+              </button>
+              <div className="text-wasteland-500 text-xs px-2 py-0.5 border-t border-wasteland-600 mt-1">Броски:</div>
+              {getTokenSkills(contextMenu.token).map((skill, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleRollFromToken(contextMenu.token, skill.name, skill.modifier)}
+                  className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
+                >
+                  🎲 {skill.name} (+{skill.modifier})
+                </button>
+              ))}
+              <div className="border-t border-wasteland-600 mt-1 pt-1">
+                <button
+                  onClick={() => { removeToken(contextMenu.token.id); setContextMenu(null); }}
+                  className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red"
+                >
+                  🗑️ Удалить токен
+                </button>
+              </div>
+            </>
+          )}
+
+          {contextMenu.type === 'portal' && (
+            <>
+              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">
+                Портал: {contextMenu.portal.name}
+              </div>
+              <div className="text-wasteland-500 text-xs px-2 py-0.5">
+                → {contextMenu.portal.targetScene}:{contextMenu.portal.linkName}
+              </div>
+              <button
+                onClick={() => {
+                  setPortalEdit({ ...contextMenu.portal });
+                  setContextMenu(null);
+                }}
+                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
+              >
+                ✏️ Редактировать
+              </button>
+              <button
+                onClick={() => {
+                  updatePortal(contextMenu.portal.id, { visible: !contextMenu.portal.visible });
+                  setContextMenu(null);
+                }}
+                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
+              >
+                {contextMenu.portal.visible ? '👁‍🗨 Скрыть' : '👁 Показать'}
+              </button>
+              <button
+                onClick={() => { removePortal(contextMenu.portal.id); setContextMenu(null); }}
+                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red"
+              >
+                🗑️ Удалить
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Редактирование портала */}
+      {portalEdit && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setPortalEdit(null)}>
+          <div className="bg-wasteland-800 border border-wasteland-600 rounded-lg p-4 max-w-xs w-full" onClick={e => e.stopPropagation()}>
+            <h3 className="text-accent-yellow font-bold mb-3">Редактировать портал</h3>
+            <div className="space-y-2">
+              <div>
+                <label className="text-wasteland-400 text-xs">Имя/ID</label>
+                <input
+                  value={portalEdit.name || ''}
+                  onChange={e => setPortalEdit({ ...portalEdit, name: e.target.value })}
+                  className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-wasteland-400 text-xs">Тип целевой сцены</label>
+                <select
+                  value={portalEdit.targetScene || 'local'}
+                  onChange={e => setPortalEdit({ ...portalEdit, targetScene: e.target.value })}
+                  className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm"
+                >
+                  <option value="local">Локальная</option>
+                  <option value="global">Глобальная</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-wasteland-400 text-xs">Имя связанного портала (на целевой сцене)</label>
+                <input
+                  value={portalEdit.linkName || ''}
+                  onChange={e => setPortalEdit({ ...portalEdit, linkName: e.target.value })}
+                  className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => updatePortal(portalEdit.id, {
+                    name: portalEdit.name,
+                    targetScene: portalEdit.targetScene,
+                    linkName: portalEdit.linkName,
+                  })}
+                  className="flex-1 bg-accent-orange text-wasteland-900 font-bold py-1.5 rounded text-sm"
+                >
+                  Сохранить
+                </button>
+                <button onClick={() => setPortalEdit(null)} className="bg-wasteland-600 text-wasteland-300 px-3 py-1.5 rounded text-sm">Отмена</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
