@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api';
 
 export default function MasterCharacterPanel({ campaignId }) {
@@ -6,12 +6,17 @@ export default function MasterCharacterPanel({ campaignId }) {
   const [expanded, setExpanded] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [allSkills, setAllSkills] = useState([]);
 
   const load = async () => {
     try {
       setError('');
-      const chars = await api.getCampaignCharacters(campaignId);
+      const [chars, skills] = await Promise.all([
+        api.getCampaignCharacters(campaignId),
+        api.getSkills()
+      ]);
       setCharacters(chars);
+      setAllSkills(skills || []);
     } catch (e) {
       setError(e.message);
       console.error(e);
@@ -31,6 +36,22 @@ export default function MasterCharacterPanel({ campaignId }) {
     await api.updateCharacterParams(charId, { [field]: value });
   };
 
+  const handleAddSkill = async (charId, skillId, modifier) => {
+    await api.addCharacterSkill(charId, skillId, modifier || 0);
+    load();
+  };
+
+  const handleUpdateSkill = async (charId, skillId, modifier) => {
+    await api.updateCharacterSkill(charId, skillId, modifier);
+    load();
+  };
+
+  const handleDeleteSkill = async (charId, skillId) => {
+    if (!confirm('Удалить навык?')) return;
+    await api.deleteCharacterSkill(charId, skillId);
+    load();
+  };
+
   if (loading) return <p className="text-wasteland-400 text-center py-4">Загрузка...</p>;
   if (error) return <p className="text-accent-red text-center py-4">Ошибка: {error}</p>;
 
@@ -45,22 +66,21 @@ export default function MasterCharacterPanel({ campaignId }) {
             onClick={() => toggleExpand(char.id)}
             className="flex justify-between items-center p-3 cursor-pointer hover:bg-wasteland-700 transition"
           >
-            <div>
+            <div className="flex items-center gap-2">
               <span className="text-wasteland-100 font-bold">{char.name}</span>
-              <span className="text-wasteland-100 font-bold">{char.name}</span>
-<button
-  onClick={(e) => {
-    e.stopPropagation();
-    if (confirm(`Удалить персонажа "${char.name}"? Игрок сможет создать нового.`)) {
-      api.deleteCharacter(char.id).then(() => load());
-    }
-  }}
-  className="text-accent-red hover:text-red-400 text-xs ml-2"
-  title="Удалить персонажа"
->
-  🗑️
-</button>
-              <span className="text-accent-orange ml-2 text-sm">{char.profession?.name}</span>
+              <span className="text-accent-orange text-sm">{char.profession?.name}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`Удалить персонажа "${char.name}"? Игрок сможет создать нового.`)) {
+                    api.deleteCharacter(char.id).then(() => load());
+                  }
+                }}
+                className="text-accent-red hover:text-red-400 text-xs ml-2"
+                title="Удалить персонажа"
+              >
+                🗑️
+              </button>
             </div>
             <span className="text-wasteland-400 text-sm">{expanded[char.id] ? '▲' : '▼'}</span>
           </div>
@@ -84,19 +104,47 @@ export default function MasterCharacterPanel({ campaignId }) {
                 ))}
               </div>
 
-              {char.skills?.length > 0 && (
-                <div>
-                  <h4 className="text-wasteland-400 text-xs uppercase mb-1">Навыки</h4>
-                  <div className="grid grid-cols-2 gap-1">
-                    {char.skills.map(s => (
-                      <div key={s.id} className="text-xs text-wasteland-300 flex justify-between">
-                        <span>{s.name}</span>
-                        <span className="text-accent-green">+{s.modifier}%</span>
+              {/* Навыки */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-wasteland-400 text-xs uppercase">Навыки</h4>
+                  <AddSkillButton
+                    allSkills={allSkills}
+                    existingSkills={char.skills || []}
+                    onAdd={(skillId, modifier) => handleAddSkill(char.id, skillId, modifier)}
+                  />
+                </div>
+                {char.skills?.length > 0 ? (
+                  <div className="space-y-1">
+                    {char.skills.map(skill => (
+                      <div key={skill.id} className="flex items-center justify-between bg-wasteland-700 p-1.5 rounded text-xs">
+                        <span className="text-wasteland-200">{skill.name}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const newMod = prompt('Новый процент:', skill.modifier);
+                              if (newMod !== null) handleUpdateSkill(char.id, skill.id, parseFloat(newMod) || 0);
+                            }}
+                            className="text-wasteland-400 hover:text-wasteland-200"
+                            title="Изменить %"
+                          >
+                            {skill.modifier}%
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSkill(char.id, skill.id)}
+                            className="text-accent-red hover:text-red-400 ml-1"
+                            title="Удалить навык"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-wasteland-500 text-xs">Нет навыков</p>
+                )}
+              </div>
 
               {char.perks?.length > 0 && (
                 <div>
@@ -119,6 +167,65 @@ export default function MasterCharacterPanel({ campaignId }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function AddSkillButton({ allSkills, existingSkills, onAdd }) {
+  const [show, setShow] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState('');
+  const [modifier, setModifier] = useState(0);
+
+  const availableSkills = allSkills.filter(
+    s => !existingSkills?.some(es => es.id === s.id)
+  );
+
+  const handleAdd = () => {
+    if (!selectedSkill) return;
+    onAdd(selectedSkill, modifier);
+    setSelectedSkill('');
+    setModifier(0);
+    setShow(false);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); setShow(!show); }}
+        className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300"
+      >
+        + Навык
+      </button>
+      {show && (
+        <div className="absolute right-0 top-full mt-1 bg-wasteland-800 border border-wasteland-600 rounded p-2 z-40 w-48 shadow-lg" onClick={e => e.stopPropagation()}>
+          <select
+            value={selectedSkill}
+            onChange={e => setSelectedSkill(e.target.value)}
+            className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs mb-1"
+          >
+            <option value="">Выбрать...</option>
+            {availableSkills.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-wasteland-400 text-xs">%:</span>
+            <input
+              type="number"
+              value={modifier}
+              onChange={e => setModifier(parseFloat(e.target.value) || 0)}
+              className="w-12 bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 text-xs text-center"
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={!selectedSkill}
+            className="w-full bg-accent-orange text-wasteland-900 text-xs py-1 rounded font-bold disabled:opacity-50"
+          >
+            Добавить
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -173,6 +280,12 @@ function MasterInventory({ charId, inventory, onRefresh }) {
     onRefresh();
   };
 
+  const handleRemoveSlot = async (slotId) => {
+    if (!confirm('Удалить предмет из инвентаря?')) return;
+    await api.removeItem(slotId, 999);
+    onRefresh();
+  };
+
   const handleAddMod = async (slotId) => {
     const modItems = allItems.filter(i => i.type === 'модификация');
     if (modItems.length === 0) { alert('Нет модификаций в базе'); return; }
@@ -210,31 +323,32 @@ function MasterInventory({ charId, inventory, onRefresh }) {
 
       {equipped.length > 0 && <p className="text-wasteland-500 text-xs mt-2">Экипировано:</p>}
       {equipped.map(s => (
-        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
+        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
       ))}
       {backpack.length > 0 && <p className="text-wasteland-500 text-xs mt-2">Рюкзак:</p>}
       {backpack.map(s => (
-        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
+        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
       ))}
     </div>
   );
 }
 
-function MasterSlotRow({ slot, onConditionChange, onAddMod, onRemoveMod }) {
+function MasterSlotRow({ slot, onConditionChange, onRemove, onAddMod, onRemoveMod }) {
   const item = slot.item;
   const condition = slot.condition_percent ?? item?.condition_percent ?? 100;
   const [showMods, setShowMods] = useState(false);
   const [localCond, setLocalCond] = useState(condition);
 
-  useEffect(() => {
-    setLocalCond(condition);
-  }, [condition]);
+  useEffect(() => { setLocalCond(condition); }, [condition]);
 
   return (
     <div className="bg-wasteland-700 p-2 rounded text-xs">
       <div className="flex justify-between items-center">
         <span className="text-wasteland-200 font-bold">{item?.name}</span>
-        <span className="text-wasteland-400">{slot.equipped ? '⚡' : ''} ×{slot.quantity}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-wasteland-400">{slot.equipped ? '⚡' : ''} ×{slot.quantity}</span>
+          <button onClick={() => onRemove(slot.id)} className="text-accent-red hover:text-red-400 ml-1" title="Удалить">✕</button>
+        </div>
       </div>
       <div className="flex items-center gap-2 mt-1">
         <span className="text-wasteland-500">Состояние:</span>
