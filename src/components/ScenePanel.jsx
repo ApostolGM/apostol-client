@@ -681,19 +681,98 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       )}
 
       {/* Библиотека фонов */}
-      {showBgLibrary && isMaster && (
-        <div className="bg-wasteland-800 p-2 border-b border-wasteland-600">
-          <div className="flex flex-col sm:flex-row gap-1 mb-2">
-            <input placeholder="Название" value={bgNameInput} onChange={e => setBgNameInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
-            <input placeholder="URL картинки" value={bgUrlInput} onChange={e => setBgUrlInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
-            <button onClick={async () => {
-              if (bgNameInput && bgUrlInput) {
-                await api.uploadBackground(campaignId, bgNameInput, bgUrlInput);
-                setBgNameInput(''); setBgUrlInput('');
+{showBgLibrary && isMaster && (
+  <div className="bg-wasteland-800 p-2 border-b border-wasteland-600">
+    <div className="flex flex-col sm:flex-row gap-1 mb-2">
+      <input
+        placeholder="Название фона"
+        value={bgNameInput}
+        onChange={e => setBgNameInput(e.target.value)}
+        className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1"
+      />
+      <label className="bg-accent-orange hover:bg-orange-500 text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded cursor-pointer text-center">
+        📁 Выбрать файл
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const name = bgNameInput || file.name;
+            setBgNameInput(name);
+            const reader = new FileReader();
+            reader.onload = async () => {
+              try {
+                const base64 = reader.result.split(',')[1];
+                const result = await api.uploadFile(base64, name, campaignId);
+                setBgNameInput('');
                 loadBackgrounds();
+              } catch (err) {
+                setError('Ошибка загрузки: ' + err.message);
               }
-            }} className="bg-accent-orange text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
-          </div>
+            };
+            reader.readAsDataURL(file);
+          }}
+        />
+      </label>
+      <span className="text-wasteland-500 text-xs self-center">или URL:</span>
+      <input
+        placeholder="URL картинки"
+        value={bgUrlInput}
+        onChange={e => setBgUrlInput(e.target.value)}
+        className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1"
+      />
+      <button onClick={async () => {
+        if (bgNameInput && bgUrlInput) {
+          await api.uploadBackground(campaignId, bgNameInput, bgUrlInput);
+          setBgNameInput(''); setBgUrlInput('');
+          loadBackgrounds();
+        }
+      }} className="bg-accent-orange text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
+    </div>
+    <div className="flex flex-wrap gap-1">
+      {backgrounds.map(bg => (
+        <div key={bg.id} onClick={() => setSelectedBg(bg)} className={`cursor-pointer p-0.5 border rounded ${selectedBg?.url === bg.url ? 'border-accent-orange' : 'border-wasteland-600'}`}>
+          <img src={bg.url} alt={bg.name} className="h-10 w-16 object-cover rounded" />
+          <p className="text-wasteland-500 text-xs text-center truncate w-16">{bg.name}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+        // Конвертируем в base64
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const base64 = reader.result.split(',')[1];
+            const result = await api.uploadFile(base64, name, campaignId);
+            setBgNameInput('');
+            loadBackgrounds();
+          } catch (err) {
+            setError('Ошибка загрузки: ' + err.message);
+          }
+        };
+        reader.readAsDataURL(file);
+      }}
+    />
+  </label>
+  <span className="text-wasteland-500 text-xs self-center">или URL:</span>
+  <input
+    placeholder="URL картинки"
+    value={bgUrlInput}
+    onChange={e => setBgUrlInput(e.target.value)}
+    className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1"
+  />
+  <button onClick={async () => {
+    if (bgNameInput && bgUrlInput) {
+      await api.uploadBackground(campaignId, bgNameInput, bgUrlInput);
+      setBgNameInput(''); setBgUrlInput('');
+      loadBackgrounds();
+    }
+  }} className="bg-accent-orange text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
+</div>
           <div className="flex flex-wrap gap-1">
             {backgrounds.map(bg => (
               <div key={bg.id} onClick={() => setSelectedBg(bg)} className={`cursor-pointer p-0.5 border rounded ${selectedBg?.url === bg.url ? 'border-accent-orange' : 'border-wasteland-600'}`}>
