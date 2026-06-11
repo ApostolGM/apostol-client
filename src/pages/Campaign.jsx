@@ -237,6 +237,24 @@ export default function Campaign({ user }) {
           <span className="text-wasteland-500 text-xs hidden sm:inline">Код: {campaign.invite_code}</span>
         </div>
       </header>
+      {isMaster ? (
+  <button onClick={() => {
+    const d = prompt('Дата (ГГГГ-ММ-ДД):', campaign.game_time_date || '2026-01-01');
+    if (!d) return;
+    const h = prompt('Часы (0-23):', campaign.game_time_hours || 12);
+    if (h === null) return;
+    const m = prompt('Минуты (0-59):', campaign.game_time_minutes || 0);
+    if (m === null) return;
+    api.updateCampaignTime(id, { game_time_date: d, game_time_hours: parseInt(h), game_time_minutes: parseInt(m) })
+      .then(() => loadCampaign());
+  }} className="text-xs text-wasteland-400 hover:text-wasteland-200">
+    🕐 {campaign.game_time_date || '2026-01-01'} {(String(campaign.game_time_hours || 12).padStart(2,'0'))}:{String(campaign.game_time_minutes || 0).padStart(2,'0')}
+  </button>
+) : (
+  <span className="text-xs text-wasteland-500">
+    🕐 {campaign.game_time_date || '2026-01-01'} {(String(campaign.game_time_hours || 12).padStart(2,'0'))}:{String(campaign.game_time_minutes || 0).padStart(2,'0')}
+  </span>
+)}
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -318,16 +336,16 @@ export default function Campaign({ user }) {
 
         <div className="hidden md:block w-64 bg-wasteland-800 border-l border-wasteland-600 p-3 overflow-y-auto flex-shrink-0">
           <h2 className="text-lg font-stylized mb-3 text-wasteland-300">Группа</h2>
-          {campaign.members?.map(m => (
-            <div key={m.user_id} className="text-sm py-1.5 px-2 rounded mb-1 bg-wasteland-700/50">
-              <div className="flex items-center gap-1">
-                {m.role === 'master' && <span>👑</span>}
-                {m.role === 'co-master' && <span>🛡️</span>}
-                <span className="text-wasteland-300">{m.user_id === user.id ? 'Вы' : `Игрок ${m.user_id?.substring(0, 6)}`}</span>
-              </div>
-              {m.character_id && <span className="text-wasteland-500 text-xs">🎭 В игре</span>}
-            </div>
-          ))}
+         {campaign.members?.map(m => (
+  <div key={m.user_id} className="text-sm py-1.5 px-2 rounded mb-1 bg-wasteland-700/50">
+    <div className="flex items-center gap-1">
+      {m.role === 'master' && <span>👑</span>}
+      {m.role === 'co-master' && <span>🛡️</span>}
+      <span className="text-wasteland-300">{m.user?.username || m.user_id?.substring(0, 8)}</span>
+    </div>
+    {m.character_id && <span className="text-wasteland-500 text-xs">🎭 В игре</span>}
+  </div>
+))}
         </div>
       </div>
     </div>
@@ -403,9 +421,6 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
               <div className="mt-2 text-xs text-wasteland-400">Навыки: {prof.starter_skills?.map(s => `${s.skill} +${s.modifier}%`).join(', ')}</div>
             </div>
           ))}
-          <button onClick={() => setStep(1)} className="text-wasteland-400 text-sm hover:text-wasteland-200">← Назад</button>
-        </div>
-      )}
       {step === 3 && selectedProf && (
         <div className="space-y-4">
           <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
