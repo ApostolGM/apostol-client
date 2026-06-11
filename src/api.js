@@ -49,6 +49,11 @@ export const api = {
   updateCharacterParams: (id, params) => request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
   deleteCharacter: (id) => request(`/characters/${id}`, { method: 'DELETE' }),
 
+  // Character skills (master)
+addCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills`, { method: 'POST', body: JSON.stringify({ skill_id: skillId, modifier }) }),
+updateCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills/${skillId}`, { method: 'PUT', body: JSON.stringify({ modifier }) }),
+deleteCharacterSkill: (charId, skillId) => request(`/characters/${charId}/skills/${skillId}`, { method: 'DELETE' }),
+
   // Master characters
   getCampaignCharacters: (campaignId) => request(`/campaigns/${campaignId}/characters`),
 
