@@ -289,10 +289,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
   };
 
   const getTokenPos = (e) => {
@@ -304,10 +301,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
   };
 
   // Рисование
@@ -346,7 +340,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const endDraw = () => {
     if (!isMaster || !isDrawing.current) return;
     isDrawing.current = false;
-
     if (currentPath.current.length > 0 && tool === 'pencil') {
       drawingsRef.current = [...drawingsRef.current, { tool: 'pencil', color, lineWidth, points: currentPath.current }];
       syncDrawings();
@@ -380,24 +373,13 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!targetScene || !['local', 'global'].includes(targetScene)) return;
     const linkName = prompt('Имя связанного портала (на целевой сцене):', portalName);
     if (!linkName) return;
-
-    const newPortal = {
-      id: `portal_${Date.now()}`,
-      name: portalName,
-      targetScene,
-      linkName,
-      x: pos.x,
-      y: pos.y,
-      visible: true,
-    };
+    const newPortal = { id: `portal_${Date.now()}`, name: portalName, targetScene, linkName, x: pos.x, y: pos.y, visible: true };
     const newPortals = [...portalsRef.current, newPortal];
     syncPortals(newPortals);
   };
 
   const updatePortal = (portalId, updates) => {
-    const newPortals = portalsRef.current.map(p =>
-      p.id === portalId ? { ...p, ...updates } : p
-    );
+    const newPortals = portalsRef.current.map(p => p.id === portalId ? { ...p, ...updates } : p);
     syncPortals(newPortals);
     setPortalEdit(null);
   };
@@ -410,11 +392,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
   const handlePortalClick = (portal) => {
     if (!portal.targetScene || portal.targetScene === sceneType) return;
-    
-    // Ищем связанный портал на целевой сцене
     setSceneType(portal.targetScene);
-    // После переключения сцены, когда она загрузится, можно центрироваться на связанном портале
-    // Но это требует ожидания загрузки — пока просто переключаем
   };
 
   // Заметки
@@ -424,16 +402,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const pos = getTokenPos(e);
     const text = prompt('Текст заметки:');
     if (text) {
-      const newToken = {
-        id: `note_${Date.now()}`,
-        type: 'note',
-        label: '📝',
-        color: '#ffcc00',
-        x: pos.x,
-        y: pos.y,
-        note: text,
-        hidden: false,
-      };
+      const newToken = { id: `note_${Date.now()}`, type: 'note', label: '📝', color: '#ffcc00', x: pos.x, y: pos.y, note: text, hidden: false };
       syncTokens([...tokens, newToken]);
     }
   };
@@ -444,16 +413,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const canvas = canvasRef.current;
     const w = canvas?.width || 800;
     const h = canvas?.height || 600;
-    const newToken = {
-      id: `${type}_${refId}_${Date.now()}`,
-      type, ref_id: refId,
-      label: (name || '?').substring(0, 2).toUpperCase(),
-      color: colorVal,
-      x: w * 0.3 + Math.random() * w * 0.4,
-      y: h * 0.3 + Math.random() * h * 0.4,
-      note: null,
-      hidden: false,
-    };
+    const newToken = { id: `${type}_${refId}_${Date.now()}`, type, ref_id: refId, label: (name || '?').substring(0, 2).toUpperCase(), color: colorVal, x: w * 0.3 + Math.random() * w * 0.4, y: h * 0.3 + Math.random() * h * 0.4, note: null, hidden: false };
     syncTokens([...tokens, newToken]);
   };
 
@@ -470,23 +430,13 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const handleTokenContext = (e, token) => {
     if (!isMaster) return;
     e.preventDefault();
-    setContextMenu({
-      type: 'token',
-      token,
-      x: e.clientX,
-      y: e.clientY,
-    });
+    setContextMenu({ type: 'token', token, x: e.clientX, y: e.clientY });
   };
 
   const handlePortalContext = (e, portal) => {
     if (!isMaster) return;
     e.preventDefault();
-    setContextMenu({
-      type: 'portal',
-      portal,
-      x: e.clientX,
-      y: e.clientY,
-    });
+    setContextMenu({ type: 'portal', portal, x: e.clientX, y: e.clientY });
   };
 
   const handleRollFromToken = async (token, skillName, modifier) => {
@@ -535,9 +485,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!draggedToken.current || !isMaster) return;
     e.preventDefault();
     const pos = getTokenPos(e);
-    setTokens(prev => prev.map(t =>
-      t.id === draggedToken.current ? { ...t, x: pos.x - dragOffset.current.x, y: pos.y - dragOffset.current.y } : t
-    ));
+    setTokens(prev => prev.map(t => t.id === draggedToken.current ? { ...t, x: pos.x - dragOffset.current.x, y: pos.y - dragOffset.current.y } : t));
   };
 
   const endTokenDrag = () => {
@@ -562,34 +510,20 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
     const scaledSize = size / zoom;
-
-    return {
-      position: 'absolute',
-      left: x / scaleX - scaledSize / 2,
-      top: y / scaleY - scaledSize / 2,
-      width: scaledSize,
-      height: scaledSize,
-      ...extra,
-    };
+    return { position: 'absolute', left: x / scaleX - scaledSize / 2, top: y / scaleY - scaledSize / 2, width: scaledSize, height: scaledSize, ...extra };
   };
 
   const getTokenStyle = (token) => {
     return getScaledStyle(token.x, token.y, tokenSize, {
       borderRadius: token.type === 'note' ? '30%' : '50%',
       backgroundColor: token.color,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontWeight: 'bold',
-      color: token.type === 'note' ? '#000' : 'white',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontWeight: 'bold', color: token.type === 'note' ? '#000' : 'white',
       fontSize: Math.max(8, (tokenSize / zoom) * 0.35),
       border: `2px solid ${token.hidden ? '#ff0000' : 'white'}`,
       opacity: token.hidden ? 0.4 : 1,
       cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
-      zIndex: 30,
-      userSelect: 'none',
-      boxShadow: '0 0 4px rgba(0,0,0,0.5)',
-      touchAction: 'none',
+      zIndex: 30, userSelect: 'none', boxShadow: '0 0 4px rgba(0,0,0,0.5)', touchAction: 'none',
     });
   };
 
@@ -600,18 +534,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       background: 'radial-gradient(circle, rgba(100,100,255,0.8), rgba(50,50,150,0.4))',
       border: '2px dashed #6666ff',
       display: (portal.visible || isMaster) ? 'flex' : 'none',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'white',
-      fontSize: Math.max(6, (size / zoom) * 0.25),
-      cursor: 'pointer',
-      zIndex: 25,
-      userSelect: 'none',
+      alignItems: 'center', justifyContent: 'center',
+      color: 'white', fontSize: Math.max(6, (size / zoom) * 0.25),
+      cursor: 'pointer', zIndex: 25, userSelect: 'none',
       opacity: portal.visible ? 0.8 : 0.3,
-      textAlign: 'center',
-      overflow: 'hidden',
-      wordBreak: 'break-all',
-      lineHeight: 1.1,
+      textAlign: 'center', overflow: 'hidden', wordBreak: 'break-all', lineHeight: 1.1,
     });
   };
 
@@ -681,98 +608,41 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       )}
 
       {/* Библиотека фонов */}
-{showBgLibrary && isMaster && (
-  <div className="bg-wasteland-800 p-2 border-b border-wasteland-600">
-    <div className="flex flex-col sm:flex-row gap-1 mb-2">
-      <input
-        placeholder="Название фона"
-        value={bgNameInput}
-        onChange={e => setBgNameInput(e.target.value)}
-        className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1"
-      />
-      <label className="bg-accent-orange hover:bg-orange-500 text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded cursor-pointer text-center">
-        📁 Выбрать файл
-        <input
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const name = bgNameInput || file.name;
-            setBgNameInput(name);
-            const reader = new FileReader();
-            reader.onload = async () => {
-              try {
-                const base64 = reader.result.split(',')[1];
-                const result = await api.uploadFile(base64, name, campaignId);
-                setBgNameInput('');
+      {showBgLibrary && isMaster && (
+        <div className="bg-wasteland-800 p-2 border-b border-wasteland-600">
+          <div className="flex flex-col sm:flex-row gap-1 mb-2">
+            <input placeholder="Название фона" value={bgNameInput} onChange={e => setBgNameInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
+            <label className="bg-accent-orange hover:bg-orange-500 text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded cursor-pointer text-center">
+              📁 Выбрать файл
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const name = bgNameInput || file.name;
+                setBgNameInput(name);
+                const reader = new FileReader();
+                reader.onload = async () => {
+                  try {
+                    const base64 = reader.result.split(',')[1];
+                    await api.uploadFile(base64, name, campaignId);
+                    setBgNameInput('');
+                    loadBackgrounds();
+                  } catch (err) {
+                    setError('Ошибка загрузки: ' + err.message);
+                  }
+                };
+                reader.readAsDataURL(file);
+              }} />
+            </label>
+            <span className="text-wasteland-500 text-xs self-center">или URL:</span>
+            <input placeholder="URL картинки" value={bgUrlInput} onChange={e => setBgUrlInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
+            <button onClick={async () => {
+              if (bgNameInput && bgUrlInput) {
+                await api.uploadBackground(campaignId, bgNameInput, bgUrlInput);
+                setBgNameInput(''); setBgUrlInput('');
                 loadBackgrounds();
-              } catch (err) {
-                setError('Ошибка загрузки: ' + err.message);
               }
-            };
-            reader.readAsDataURL(file);
-          }}
-        />
-      </label>
-      <span className="text-wasteland-500 text-xs self-center">или URL:</span>
-      <input
-        placeholder="URL картинки"
-        value={bgUrlInput}
-        onChange={e => setBgUrlInput(e.target.value)}
-        className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1"
-      />
-      <button onClick={async () => {
-        if (bgNameInput && bgUrlInput) {
-          await api.uploadBackground(campaignId, bgNameInput, bgUrlInput);
-          setBgNameInput(''); setBgUrlInput('');
-          loadBackgrounds();
-        }
-      }} className="bg-accent-orange text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
-    </div>
-    <div className="flex flex-wrap gap-1">
-      {backgrounds.map(bg => (
-        <div key={bg.id} onClick={() => setSelectedBg(bg)} className={`cursor-pointer p-0.5 border rounded ${selectedBg?.url === bg.url ? 'border-accent-orange' : 'border-wasteland-600'}`}>
-          <img src={bg.url} alt={bg.name} className="h-10 w-16 object-cover rounded" />
-          <p className="text-wasteland-500 text-xs text-center truncate w-16">{bg.name}</p>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
-
-        // Конвертируем в base64
-        const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            const base64 = reader.result.split(',')[1];
-            const result = await api.uploadFile(base64, name, campaignId);
-            setBgNameInput('');
-            loadBackgrounds();
-          } catch (err) {
-            setError('Ошибка загрузки: ' + err.message);
-          }
-        };
-        reader.readAsDataURL(file);
-      }}
-    />
-  </label>
-  <span className="text-wasteland-500 text-xs self-center">или URL:</span>
-  <input
-    placeholder="URL картинки"
-    value={bgUrlInput}
-    onChange={e => setBgUrlInput(e.target.value)}
-    className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1"
-  />
-  <button onClick={async () => {
-    if (bgNameInput && bgUrlInput) {
-      await api.uploadBackground(campaignId, bgNameInput, bgUrlInput);
-      setBgNameInput(''); setBgUrlInput('');
-      loadBackgrounds();
-    }
-  }} className="bg-accent-orange text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
-</div>
+            }} className="bg-accent-orange text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
+          </div>
           <div className="flex flex-wrap gap-1">
             {backgrounds.map(bg => (
               <div key={bg.id} onClick={() => setSelectedBg(bg)} className={`cursor-pointer p-0.5 border rounded ${selectedBg?.url === bg.url ? 'border-accent-orange' : 'border-wasteland-600'}`}>
@@ -814,39 +684,28 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
           {!selectedBg && (
             <div className="flex items-center justify-center h-64 text-wasteland-500 text-sm" style={{ width: '400px' }}>Выберите фон</div>
           )}
-          <canvas
-            ref={canvasRef}
-            className="absolute top-0 left-0"
-            style={{ pointerEvents: ['pencil', 'eraser'].includes(tool) ? 'auto' : 'none' }}
-          />
+          <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: ['pencil', 'eraser'].includes(tool) ? 'auto' : 'none' }} />
 
           {/* Порталы */}
           {portalsRef.current.map(portal => (
-            <div
-              key={portal.id}
-              style={getPortalStyle(portal)}
+            <div key={portal.id} style={getPortalStyle(portal)}
               onClick={(e) => { e.stopPropagation(); handlePortalClick(portal); }}
               onContextMenu={(e) => handlePortalContext(e, portal)}
-              title={`${portal.name} → ${portal.targetScene}:${portal.linkName}`}
-            >
+              title={`${portal.name} → ${portal.targetScene}:${portal.linkName}`}>
               {portal.name?.substring(0, 4)}
             </div>
           ))}
 
           {/* Токены */}
           {tokens.filter(t => !t.hidden || isMaster).map(token => (
-            <div
-              key={token.id}
+            <div key={token.id}
               onMouseDown={(e) => startTokenDrag(e, token.id)}
               onTouchStart={(e) => startTokenDrag(e, token.id)}
               onContextMenu={(e) => handleTokenContext(e, token)}
               onClick={(e) => { e.stopPropagation(); if (token.type === 'note' && token.note) setSelectedNote(token); }}
-              style={getTokenStyle(token)}
-            >
+              style={getTokenStyle(token)}>
               {token.label}
-              {token.hidden && isMaster && (
-                <span className="absolute -top-1 -right-1 text-xs">👁‍🗨</span>
-              )}
+              {token.hidden && isMaster && <span className="absolute -top-1 -right-1 text-xs">👁‍🗨</span>}
             </div>
           ))}
         </div>
@@ -868,73 +727,39 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
       {/* Контекстное меню */}
       {contextMenu && (
-        <div
-          className="fixed bg-wasteland-800 border border-wasteland-600 rounded shadow-lg z-50 py-1 min-w-[160px]"
+        <div className="fixed bg-wasteland-800 border border-wasteland-600 rounded shadow-lg z-50 py-1 min-w-[160px]"
           style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 200) }}
-          onClick={e => e.stopPropagation()}
-        >
+          onClick={e => e.stopPropagation()}>
           {contextMenu.type === 'token' && (
             <>
-              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">
-                Токен: {contextMenu.token.label}
-              </div>
-              <button
-                onClick={() => { toggleTokenVisibility(contextMenu.token.id); setContextMenu(null); }}
-                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
-              >
+              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">Токен: {contextMenu.token.label}</div>
+              <button onClick={() => { toggleTokenVisibility(contextMenu.token.id); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
                 {contextMenu.token.hidden ? '👁 Показать' : '👁‍🗨 Скрыть'}
               </button>
               <div className="text-wasteland-500 text-xs px-2 py-0.5 border-t border-wasteland-600 mt-1">Броски:</div>
               {getTokenSkills(contextMenu.token).map((skill, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleRollFromToken(contextMenu.token, skill.name, skill.modifier)}
-                  className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
-                >
+                <button key={i} onClick={() => handleRollFromToken(contextMenu.token, skill.name, skill.modifier)} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
                   🎲 {skill.name} (+{skill.modifier})
                 </button>
               ))}
               <div className="border-t border-wasteland-600 mt-1 pt-1">
-                <button
-                  onClick={() => { removeToken(contextMenu.token.id); setContextMenu(null); }}
-                  className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red"
-                >
+                <button onClick={() => { removeToken(contextMenu.token.id); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red">
                   🗑️ Удалить токен
                 </button>
               </div>
             </>
           )}
-
           {contextMenu.type === 'portal' && (
             <>
-              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">
-                Портал: {contextMenu.portal.name}
-              </div>
-              <div className="text-wasteland-500 text-xs px-2 py-0.5">
-                → {contextMenu.portal.targetScene}:{contextMenu.portal.linkName}
-              </div>
-              <button
-                onClick={() => {
-                  setPortalEdit({ ...contextMenu.portal });
-                  setContextMenu(null);
-                }}
-                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
-              >
+              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">Портал: {contextMenu.portal.name}</div>
+              <div className="text-wasteland-500 text-xs px-2 py-0.5">→ {contextMenu.portal.targetScene}:{contextMenu.portal.linkName}</div>
+              <button onClick={() => { setPortalEdit({ ...contextMenu.portal }); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
                 ✏️ Редактировать
               </button>
-              <button
-                onClick={() => {
-                  updatePortal(contextMenu.portal.id, { visible: !contextMenu.portal.visible });
-                  setContextMenu(null);
-                }}
-                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
-              >
+              <button onClick={() => { updatePortal(contextMenu.portal.id, { visible: !contextMenu.portal.visible }); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
                 {contextMenu.portal.visible ? '👁‍🗨 Скрыть' : '👁 Показать'}
               </button>
-              <button
-                onClick={() => { removePortal(contextMenu.portal.id); setContextMenu(null); }}
-                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red"
-              >
+              <button onClick={() => { removePortal(contextMenu.portal.id); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red">
                 🗑️ Удалить
               </button>
             </>
@@ -950,42 +775,21 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             <div className="space-y-2">
               <div>
                 <label className="text-wasteland-400 text-xs">Имя/ID</label>
-                <input
-                  value={portalEdit.name || ''}
-                  onChange={e => setPortalEdit({ ...portalEdit, name: e.target.value })}
-                  className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm"
-                />
+                <input value={portalEdit.name || ''} onChange={e => setPortalEdit({ ...portalEdit, name: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm" />
               </div>
               <div>
                 <label className="text-wasteland-400 text-xs">Тип целевой сцены</label>
-                <select
-                  value={portalEdit.targetScene || 'local'}
-                  onChange={e => setPortalEdit({ ...portalEdit, targetScene: e.target.value })}
-                  className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm"
-                >
+                <select value={portalEdit.targetScene || 'local'} onChange={e => setPortalEdit({ ...portalEdit, targetScene: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm">
                   <option value="local">Локальная</option>
                   <option value="global">Глобальная</option>
                 </select>
               </div>
               <div>
                 <label className="text-wasteland-400 text-xs">Имя связанного портала (на целевой сцене)</label>
-                <input
-                  value={portalEdit.linkName || ''}
-                  onChange={e => setPortalEdit({ ...portalEdit, linkName: e.target.value })}
-                  className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm"
-                />
+                <input value={portalEdit.linkName || ''} onChange={e => setPortalEdit({ ...portalEdit, linkName: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm" />
               </div>
               <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => updatePortal(portalEdit.id, {
-                    name: portalEdit.name,
-                    targetScene: portalEdit.targetScene,
-                    linkName: portalEdit.linkName,
-                  })}
-                  className="flex-1 bg-accent-orange text-wasteland-900 font-bold py-1.5 rounded text-sm"
-                >
-                  Сохранить
-                </button>
+                <button onClick={() => updatePortal(portalEdit.id, { name: portalEdit.name, targetScene: portalEdit.targetScene, linkName: portalEdit.linkName })} className="flex-1 bg-accent-orange text-wasteland-900 font-bold py-1.5 rounded text-sm">Сохранить</button>
                 <button onClick={() => setPortalEdit(null)} className="bg-wasteland-600 text-wasteland-300 px-3 py-1.5 rounded text-sm">Отмена</button>
               </div>
             </div>
@@ -1003,10 +807,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             </div>
             <p className="text-wasteland-200 text-sm whitespace-pre-wrap">{selectedNote.note}</p>
             {isMaster && (
-              <button
-                onClick={() => { removeToken(selectedNote.id); setSelectedNote(null); }}
-                className="mt-3 text-xs bg-accent-red/20 hover:bg-accent-red/40 text-accent-red px-2 py-1 rounded"
-              >
+              <button onClick={() => { removeToken(selectedNote.id); setSelectedNote(null); }} className="mt-3 text-xs bg-accent-red/20 hover:bg-accent-red/40 text-accent-red px-2 py-1 rounded">
                 Удалить
               </button>
             )}
