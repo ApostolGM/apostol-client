@@ -318,6 +318,7 @@ export default function NPCPanel({ campaignId, socketRef }) {
                 >
                   Использовать
                 </button>
+                <button onClick={() => { if (confirm('Удалить шаблон?')) { api.deleteNPC(tmpl.id).then(load); } }} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 text-accent-red px-2 py-1 rounded">🗑️</button>
               </div>
             ))}
           </div>
