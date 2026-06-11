@@ -280,6 +280,12 @@ function MasterInventory({ charId, inventory, onRefresh }) {
     onRefresh();
   };
 
+  const handleQuantityChange = async (slotId, newQty) => {
+    if (newQty < 1) return;
+    await api.updateInventorySlot(slotId, { quantity: newQty });
+    onRefresh();
+  };
+
   const handleRemoveSlot = async (slotId) => {
     if (!confirm('Удалить предмет из инвентаря?')) return;
     await api.removeItem(slotId, 999);
@@ -323,30 +329,48 @@ function MasterInventory({ charId, inventory, onRefresh }) {
 
       {equipped.length > 0 && <p className="text-wasteland-500 text-xs mt-2">Экипировано:</p>}
       {equipped.map(s => (
-        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
+        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onQuantityChange={handleQuantityChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
       ))}
       {backpack.length > 0 && <p className="text-wasteland-500 text-xs mt-2">Рюкзак:</p>}
       {backpack.map(s => (
-        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
+        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onQuantityChange={handleQuantityChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
       ))}
     </div>
   );
 }
 
-function MasterSlotRow({ slot, onConditionChange, onRemove, onAddMod, onRemoveMod }) {
+function MasterSlotRow({ slot, onConditionChange, onQuantityChange, onRemove, onAddMod, onRemoveMod }) {
   const item = slot.item;
   const condition = slot.condition_percent ?? item?.condition_percent ?? 100;
   const [showMods, setShowMods] = useState(false);
   const [localCond, setLocalCond] = useState(condition);
+  const [qty, setQty] = useState(slot.quantity || 1);
 
-  useEffect(() => { setLocalCond(condition); }, [condition]);
+  useEffect(() => {
+    setLocalCond(condition);
+    setQty(slot.quantity || 1);
+  }, [condition, slot.quantity]);
+
+  const handleQtyBlur = () => {
+    if (qty !== slot.quantity) {
+      onQuantityChange(slot.id, qty);
+    }
+  };
 
   return (
     <div className="bg-wasteland-700 p-2 rounded text-xs">
       <div className="flex justify-between items-center">
         <span className="text-wasteland-200 font-bold">{item?.name}</span>
         <div className="flex items-center gap-1">
-          <span className="text-wasteland-400">{slot.equipped ? '⚡' : ''} ×{slot.quantity}</span>
+          <span className="text-wasteland-400">{slot.equipped ? '⚡' : ''}</span>
+          <input
+            type="number"
+            value={qty}
+            onChange={e => setQty(parseInt(e.target.value) || 1)}
+            onBlur={handleQtyBlur}
+            className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 text-xs w-10 text-center"
+            min="1"
+          />
           <button onClick={() => onRemove(slot.id)} className="text-accent-red hover:text-red-400 ml-1" title="Удалить">✕</button>
         </div>
       </div>
