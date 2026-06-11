@@ -29,11 +29,13 @@ export const api = {
   createCampaign: (title) => request('/campaigns', { method: 'POST', body: JSON.stringify({ title }) }),
   joinCampaign: (code) => request(`/campaigns/join/${code}`, { method: 'POST' }),
 
-  // Chat  ← ВОТ СЮДА
+  // Campaign time
+  updateCampaignTime: (campaignId, data) => request(`/campaigns/${campaignId}/time`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Chat
   getChatMessages: (campaignId) => request(`/chat/${campaignId}`),
   sendChatMessage: (campaignId, text, isRoll) => request(`/chat/${campaignId}`, { method: 'POST', body: JSON.stringify({ text, is_roll: isRoll || false }) }),
 
-  
   // Professions
   getProfessions: () => request('/professions'),
 
@@ -49,13 +51,13 @@ export const api = {
   updateCharacterParams: (id, params) => request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
   deleteCharacter: (id) => request(`/characters/${id}`, { method: 'DELETE' }),
 
-  // Character skills (master)
-addCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills`, { method: 'POST', body: JSON.stringify({ skill_id: skillId, modifier }) }),
-updateCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills/${skillId}`, { method: 'PUT', body: JSON.stringify({ modifier }) }),
-deleteCharacterSkill: (charId, skillId) => request(`/characters/${charId}/skills/${skillId}`, { method: 'DELETE' }),
-
   // Master characters
   getCampaignCharacters: (campaignId) => request(`/campaigns/${campaignId}/characters`),
+
+  // Character skills (master)
+  addCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills`, { method: 'POST', body: JSON.stringify({ skill_id: skillId, modifier }) }),
+  updateCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills/${skillId}`, { method: 'PUT', body: JSON.stringify({ modifier }) }),
+  deleteCharacterSkill: (charId, skillId) => request(`/characters/${charId}/skills/${skillId}`, { method: 'DELETE' }),
 
   // Dice
   diceAuto: (characterId, skillName) => request('/dice/auto', { method: 'POST', body: JSON.stringify({ character_id: characterId, skill_name: skillName }) }),
