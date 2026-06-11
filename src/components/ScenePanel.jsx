@@ -15,7 +15,15 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const [lineWidth, setLineWidth] = useState(3);
   const [tokenSize, setTokenSize] = useState(36);
   const [zoom, setZoom] = useState(1);
+  const [brightness, setBrightness] = useState(100);
+  const [showDrawings, setShowDrawings] = useState(true);
   const [selectedNote, setSelectedNote] = useState(null);
+  const [contextToken, setContextToken] = useState(null);
+  const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
+  const [snapshots, setSnapshots] = useState([]);
+  const [showSnapshots, setShowSnapshots] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -24,6 +32,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const draggedToken = useRef(null);
   const dragOffset = useRef({ x: 0, y: 0 });
   const drawingsRef = useRef([]);
+  const portalsRef = useRef([]);
 
   // Загрузка сцены
   const loadScene = useCallback(async () => {
@@ -31,19 +40,28 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       const data = await api.getScenes(campaignId, sceneType);
       if (data && data.length > 0) {
         const s = data[0];
-        setTokens(s.tokens || []);
+        const sceneTokens = s.tokens || [];
+        setTokens(sceneTokens);
         drawingsRef.current = s.drawings || [];
+        portalsRef.current = s.portals || [];
         if (s.background_url) {
           setSelectedBg({ url: s.background_url, name: '' });
         } else {
           setSelectedBg(null);
         }
+        // Инициализируем историю
+        const initialState = { tokens: sceneTokens, drawings: s.drawings || [], portals: s.portals || [] };
+        setHistory([initialState]);
+        setHistoryIndex(0);
         redrawAll();
       } else {
         setTokens([]);
         drawingsRef.current = [];
+        portalsRef.current = [];
         setSelectedBg(null);
         clearCanvas();
+        setHistory([{ tokens: [], drawings: [], portals: [] }]);
+        setHistoryIndex(0);
       }
     } catch (e) { console.error(e); }
   }, [campaignId, sceneType]);
@@ -54,7 +72,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
   useEffect(() => { loadScene(); loadBackgrounds(); }, [sceneType, campaignId]);
 
-  // WebSocket слушатели
+  // WebSocket
   useEffect(() => {
     if (!socketRef?.current) return;
     const socket = socketRef.current;
@@ -68,15 +86,74 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         redrawAll();
       }
     };
+    const h4 = (data) => {
+      if (data.campaignId === campaignId && data.sceneType === sceneType && data.portals) {
+        portalsRef.current = data.portals;
+      }
+    };
     socket.on('scene_updated', h1);
     socket.on('scene_token_moved', h2);
     socket.on('scene_drawings', h3);
+    socket.on('scene_portals', h4);
     return () => {
       socket.off('scene_updated', h1);
       socket.off('scene_token_moved', h2);
       socket.off('scene_drawings', h3);
+      socket.off('scene_portals', h4);
     };
   }, [campaignId, sceneType, socketRef]);
+
+  // История
+  const pushHistory = (newState) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newState);
+    if (newHistory.length > 50) newHistory.shift();
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      const state = history[newIndex];
+      setTokens(state.tokens);
+      drawingsRef.current = state.drawings;
+      portalsRef.current = state.portals;
+      redrawAll();
+      syncAll();
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      const state = history[newIndex];
+      setTokens(state.tokens);
+      drawingsRef.current = state.drawings;
+      portalsRef.current = state.portals;
+      redrawAll();
+      syncAll();
+    }
+  };
+
+  // Горячие клавиши
+  useEffect(() => {
+    const handler = (e) => {
+      if (!isMaster) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isMaster, historyIndex, history]);
 
   // Очистка холста
   const clearCanvas = () => {
@@ -86,20 +163,19 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  // Перерисовка всего
   const redrawAll = () => {
     if (!canvasRef.current || !bgImageRef.current) return;
     const canvas = canvasRef.current;
     const img = bgImageRef.current;
-
     canvas.width = img.naturalWidth || img.width || 800;
     canvas.height = img.naturalHeight || img.height || 600;
-
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    for (const d of drawingsRef.current) {
-      drawShape(ctx, d);
+    if (showDrawings) {
+      for (const d of drawingsRef.current) {
+        drawShape(ctx, d);
+      }
     }
   };
 
@@ -119,7 +195,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  // Сохранение сцены (для фона)
+  // Сохранение
   const saveScene = async () => {
     setError('');
     try {
@@ -128,6 +204,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         background_url: selectedBg?.url || null,
         tokens,
         drawings: drawingsRef.current,
+        portals: portalsRef.current,
         fog_of_war: [],
       });
       if (socketRef?.current) {
@@ -136,28 +213,80 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     } catch (e) { setError(e.message); }
   };
 
-  // Отправка токенов в реальном времени
-  const syncTokens = (newTokens) => {
-    setTokens(newTokens);
+  const syncAll = () => {
     if (socketRef?.current) {
-      socketRef.current.emit('scene_token_move', {
-        campaignId,
-        sceneType,
-        tokens: newTokens,
-      });
+      socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
+      socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
+      socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: portalsRef.current });
     }
   };
 
-  // Отправка рисунков в реальном времени
-  const syncDrawings = () => {
+  const syncTokens = (newTokens) => {
+    setTokens(newTokens);
+    const newState = { tokens: newTokens, drawings: drawingsRef.current, portals: portalsRef.current };
+    pushHistory(newState);
     if (socketRef?.current) {
-      socketRef.current.emit('scene_drawings', {
-        campaignId,
-        sceneType,
-        drawings: drawingsRef.current,
-      });
+      socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
     }
   };
+
+  const syncDrawings = () => {
+    const newState = { tokens, drawings: drawingsRef.current, portals: portalsRef.current };
+    pushHistory(newState);
+    if (socketRef?.current) {
+      socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
+    }
+  };
+
+  const syncPortals = (newPortals) => {
+    portalsRef.current = newPortals;
+    const newState = { tokens, drawings: drawingsRef.current, portals: newPortals };
+    pushHistory(newState);
+    if (socketRef?.current) {
+      socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
+    }
+  };
+
+  // Снапшоты
+  const takeSnapshot = () => {
+    const name = prompt('Название снапшота:');
+    if (!name) return;
+    const snapshot = {
+      id: Date.now().toString(),
+      name,
+      tokens: JSON.parse(JSON.stringify(tokens)),
+      drawings: JSON.parse(JSON.stringify(drawingsRef.current)),
+      portals: JSON.parse(JSON.stringify(portalsRef.current)),
+    };
+    const newSnapshots = [...snapshots, snapshot];
+    setSnapshots(newSnapshots);
+    localStorage.setItem(`snapshots_${campaignId}_${sceneType}`, JSON.stringify(newSnapshots));
+  };
+
+  const loadSnapshot = (snapshot) => {
+    if (!confirm(`Загрузить снапшот "${snapshot.name}"? Текущее состояние будет потеряно.`)) return;
+    setTokens(snapshot.tokens);
+    drawingsRef.current = snapshot.drawings;
+    portalsRef.current = snapshot.portals;
+    redrawAll();
+    const newState = { tokens: snapshot.tokens, drawings: snapshot.drawings, portals: snapshot.portals };
+    pushHistory(newState);
+    syncAll();
+  };
+
+  const deleteSnapshot = (id) => {
+    const newSnapshots = snapshots.filter(s => s.id !== id);
+    setSnapshots(newSnapshots);
+    localStorage.setItem(`snapshots_${campaignId}_${sceneType}`, JSON.stringify(newSnapshots));
+  };
+
+  // Загружаем снапшоты из localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`snapshots_${campaignId}_${sceneType}`);
+      if (saved) setSnapshots(JSON.parse(saved));
+    } catch (e) {}
+  }, [campaignId, sceneType]);
 
   // Загрузка изображения
   useEffect(() => {
@@ -171,37 +300,29 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       bgImageRef.current = img;
       redrawAll();
     };
-    img.onerror = () => {
-      setError('Не удалось загрузить изображение');
-    };
+    img.onerror = () => setError('Не удалось загрузить изображение');
     img.src = selectedBg.url;
   }, [selectedBg]);
 
-  // Зум колёсиком
+  // Зум
   const handleWheel = (e) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     setZoom(prev => Math.max(0.3, Math.min(3, prev + delta)));
   };
 
-  // Получение координат относительно холста (с учётом зума)
+  // Координаты
   const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
   };
 
-  // Получение координат для токенов (с учётом зума)
   const getTokenPos = (e) => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
@@ -209,14 +330,9 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const rect = container.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
-
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
   };
 
   // Рисование
@@ -226,11 +342,9 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!isMaster) return;
     if (tool !== 'pencil' && tool !== 'eraser') return;
     e.preventDefault();
-
     const pos = getCanvasPos(e);
     isDrawing.current = true;
     currentPath.current = [{ x: pos.x, y: pos.y }];
-
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -247,10 +361,8 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!isMaster || !isDrawing.current) return;
     if (tool !== 'pencil' && tool !== 'eraser') return;
     e.preventDefault();
-
     const pos = getCanvasPos(e);
     currentPath.current.push({ x: pos.x, y: pos.y });
-
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -263,12 +375,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     isDrawing.current = false;
 
     if (currentPath.current.length > 0 && tool === 'pencil') {
-      drawingsRef.current = [...drawingsRef.current, {
-        tool: 'pencil',
-        color,
-        lineWidth,
-        points: currentPath.current,
-      }];
+      drawingsRef.current = [...drawingsRef.current, { tool: 'pencil', color, lineWidth, points: currentPath.current }];
       syncDrawings();
     }
 
@@ -278,11 +385,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         if (d.tool !== 'pencil' || !d.points?.length) return true;
         for (const dp of d.points) {
           for (const ep of eraserPath) {
-            const dx = dp.x - ep.x;
-            const dy = dp.y - ep.y;
-            if (Math.sqrt(dx * dx + dy * dy) < (lineWidth * 4 + (d.lineWidth || 3))) {
-              return false;
-            }
+            if (Math.sqrt((dp.x - ep.x) ** 2 + (dp.y - ep.y) ** 2) < (lineWidth * 4 + (d.lineWidth || 3))) return false;
           }
         }
         return true;
@@ -297,6 +400,39 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
+  // Порталы
+  const addPortal = (e) => {
+    if (!isMaster || tool !== 'portal') return;
+    e.preventDefault();
+    const pos = getTokenPos(e);
+    const targetScene = prompt('Тип сцены для перехода (local/global):', sceneType === 'local' ? 'global' : 'local');
+    if (!targetScene || !['local', 'global'].includes(targetScene)) return;
+    const label = prompt('Название портала:', 'Портал');
+    if (!label) return;
+    const newPortal = {
+      id: `portal_${Date.now()}`,
+      label,
+      targetScene,
+      x: pos.x,
+      y: pos.y,
+      visible: true,
+    };
+    const newPortals = [...portalsRef.current, newPortal];
+    syncPortals(newPortals);
+  };
+
+  const togglePortalVisibility = (portalId) => {
+    const newPortals = portalsRef.current.map(p =>
+      p.id === portalId ? { ...p, visible: !p.visible } : p
+    );
+    syncPortals(newPortals);
+  };
+
+  const removePortal = (portalId) => {
+    const newPortals = portalsRef.current.filter(p => p.id !== portalId);
+    syncPortals(newPortals);
+  };
+
   // Заметки
   const addNoteToken = (e) => {
     if (!isMaster || tool !== 'note') return;
@@ -304,17 +440,8 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const pos = getTokenPos(e);
     const text = prompt('Текст заметки:');
     if (text) {
-      const newToken = {
-        id: `note_${Date.now()}`,
-        type: 'note',
-        label: '📝',
-        color: '#ffcc00',
-        x: pos.x,
-        y: pos.y,
-        note: text,
-      };
-      const newTokens = [...tokens, newToken];
-      syncTokens(newTokens);
+      const newToken = { id: `note_${Date.now()}`, type: 'note', label: '📝', color: '#ffcc00', x: pos.x, y: pos.y, note: text, hidden: false };
+      syncTokens([...tokens, newToken]);
     }
   };
 
@@ -326,28 +453,77 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const h = canvas?.height || 600;
     const newToken = {
       id: `${type}_${refId}_${Date.now()}`,
-      type,
-      ref_id: refId,
+      type, ref_id: refId,
       label: (name || '?').substring(0, 2).toUpperCase(),
       color: colorVal,
       x: w * 0.3 + Math.random() * w * 0.4,
       y: h * 0.3 + Math.random() * h * 0.4,
       note: null,
+      hidden: false,
     };
-    const newTokens = [...tokens, newToken];
+    syncTokens([...tokens, newToken]);
+  };
+
+  const toggleTokenVisibility = (tokenId) => {
+    const newTokens = tokens.map(t =>
+      t.id === tokenId ? { ...t, hidden: !t.hidden } : t
+    );
     syncTokens(newTokens);
   };
 
   const removeToken = (tokenId) => {
-    const newTokens = tokens.filter(t => t.id !== tokenId);
-    syncTokens(newTokens);
+    syncTokens(tokens.filter(t => t.id !== tokenId));
+  };
+
+  // Контекстное меню токена
+  const handleTokenContext = (e, token) => {
+    if (!isMaster) return;
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    setContextToken(token);
+    setContextPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const handleRollFromToken = async (token, skillName, modifier) => {
+    try {
+      const name = token.type === 'npc' ? token.label : token.label;
+      const d20 = Math.floor(Math.random() * 20) + 1;
+      const sum = d20 + modifier;
+      if (socketRef?.current) {
+        socketRef.current.emit('dice_roll', {
+          campaignId,
+          userId: 'master',
+          username: `${token.label} (${token.type === 'npc' ? 'NPC' : 'Игрок'})`,
+          skillName,
+          formula: `d20 (${d20}) + ${modifier}`,
+          sum,
+          hidden: false,
+        });
+      }
+    } catch (e) { console.error(e); }
+    setContextToken(null);
+  };
+
+  // Токены для контекстного меню
+  const getTokenSkills = (token) => {
+    if (token.type === 'npc') {
+      const npc = npcs?.find(n => n.id === token.ref_id);
+      return (npc?.skills || []).map(s => ({ name: s.name, modifier: s.modifier || 0 }));
+    }
+    if (token.type === 'character') {
+      const char = characters?.find(c => c.id === token.ref_id);
+      return (char?.skills || []).map(s => ({ name: s.name, modifier: s.totalModifier || s.modifier || 0 }));
+    }
+    return [];
   };
 
   const startTokenDrag = (e, tokenId) => {
     if (!isMaster || tool !== 'select') return;
+    if (e.button === 2) return; // Правый клик — контекстное меню
     e.preventDefault();
     e.stopPropagation();
-
     draggedToken.current = tokenId;
     const pos = getTokenPos(e);
     const token = tokens.find(t => t.id === tokenId);
@@ -360,19 +536,18 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!draggedToken.current || !isMaster) return;
     e.preventDefault();
     const pos = getTokenPos(e);
-    const newTokens = tokens.map(t =>
-      t.id === draggedToken.current ? {
-        ...t,
-        x: pos.x - dragOffset.current.x,
-        y: pos.y - dragOffset.current.y
-      } : t
-    );
-    setTokens(newTokens);
+    setTokens(prev => prev.map(t =>
+      t.id === draggedToken.current ? { ...t, x: pos.x - dragOffset.current.x, y: pos.y - dragOffset.current.y } : t
+    ));
   };
 
   const endTokenDrag = () => {
     if (draggedToken.current) {
-      syncTokens(tokens);
+      const newState = { tokens, drawings: drawingsRef.current, portals: portalsRef.current };
+      pushHistory(newState);
+      if (socketRef?.current) {
+        socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
+      }
     }
     draggedToken.current = null;
   };
@@ -382,10 +557,10 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     ...(npcs || []).filter(n => n.visibility === 'combat').map(n => ({ type: 'npc', id: n.id, name: n.name, color: '#cc3333' })),
   ];
 
-  // Расчёт позиции токена с учётом зума
+  // Стиль токена с учётом зума
   const getTokenStyle = (token) => {
     const canvas = canvasRef.current;
-    if (!canvas || !containerRef.current) return {};
+    if (!canvas || !containerRef.current) return { display: 'none' };
     const rect = containerRef.current.getBoundingClientRect();
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
@@ -405,12 +580,43 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       fontWeight: 'bold',
       color: token.type === 'note' ? '#000' : 'white',
       fontSize: Math.max(8, size * 0.35),
-      border: `2px solid white`,
+      border: `2px solid ${token.hidden ? '#ff0000' : 'white'}`,
+      opacity: token.hidden ? 0.4 : 1,
       cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
       zIndex: 30,
       userSelect: 'none',
       boxShadow: '0 0 4px rgba(0,0,0,0.5)',
       touchAction: 'none',
+    };
+  };
+
+  // Стиль портала
+  const getPortalStyle = (portal) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !containerRef.current) return { display: 'none' };
+    const rect = containerRef.current.getBoundingClientRect();
+    const scaleX = canvas.width / (rect.width / zoom);
+    const scaleY = canvas.height / (rect.height / zoom);
+    const size = 30 / zoom;
+
+    return {
+      position: 'absolute',
+      left: portal.x / scaleX - size / 2,
+      top: portal.y / scaleY - size / 2,
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      background: 'radial-gradient(circle, rgba(100,100,255,0.8), rgba(50,50,150,0.4))',
+      border: '2px dashed #6666ff',
+      display: portal.visible || isMaster ? 'flex' : 'none',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'white',
+      fontSize: Math.max(6, size * 0.3),
+      cursor: 'pointer',
+      zIndex: 25,
+      userSelect: 'none',
+      opacity: portal.visible ? 0.8 : 0.3,
     };
   };
 
@@ -430,30 +636,54 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
               <option value="pencil">✏️</option>
               <option value="eraser">🧹</option>
               <option value="note">📝</option>
+              <option value="portal">🌀</option>
             </select>
             {(tool === 'pencil' || tool === 'eraser') && (
               <>
                 {tool === 'pencil' && <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-5 h-5 rounded cursor-pointer" />}
-                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" title="Толщина линии" />
+                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" title="Толщина" />
               </>
             )}
+            <button onClick={() => setShowDrawings(!showDrawings)} className={`text-xs px-2 py-1 rounded ${showDrawings ? 'bg-wasteland-600 text-wasteland-300' : 'bg-wasteland-800 text-wasteland-500'}`} title="Слой рисунков">
+              {showDrawings ? '📐' : '📐‍🗑️'}
+            </button>
+            <button onClick={undo} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="Отменить (Ctrl+Z)">↩</button>
+            <button onClick={redo} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="Повторить (Ctrl+Y)">↪</button>
+            <button onClick={takeSnapshot} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300" title="Снапшот">📸</button>
+            <button onClick={() => setShowSnapshots(!showSnapshots)} className={`text-xs px-1.5 py-0.5 rounded ${showSnapshots ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
+              📋{snapshots.length > 0 ? `(${snapshots.length})` : ''}
+            </button>
             <span className="text-wasteland-500 text-xs">Размер:</span>
-            <input type="range" min="16" max="72" value={tokenSize} onChange={e => setTokenSize(parseInt(e.target.value))} className="w-16" title="Размер токенов" />
-            <span className="text-wasteland-500 text-xs">Зум:</span>
-            <input type="range" min="30" max="300" value={Math.round(zoom * 100)} onChange={e => setZoom(parseInt(e.target.value) / 100)} className="w-16" title="Масштаб" />
-            <span className="text-wasteland-400 text-xs">{Math.round(zoom * 100)}%</span>
-            <button onClick={saveScene} className="text-xs bg-accent-orange hover:bg-orange-500 text-wasteland-900 px-2 py-1 rounded font-bold">💾</button>
+            <input type="range" min="16" max="72" value={tokenSize} onChange={e => setTokenSize(parseInt(e.target.value))} className="w-16" />
           </>
         )}
-        {!isMaster && (
-          <>
-            <span className="text-wasteland-500 text-xs">Зум:</span>
-            <input type="range" min="30" max="300" value={Math.round(zoom * 100)} onChange={e => setZoom(parseInt(e.target.value) / 100)} className="w-16" title="Масштаб" />
-            <span className="text-wasteland-400 text-xs">{Math.round(zoom * 100)}%</span>
-          </>
+        <span className="text-wasteland-500 text-xs">Зум:</span>
+        <input type="range" min="30" max="300" value={Math.round(zoom * 100)} onChange={e => setZoom(parseInt(e.target.value) / 100)} className="w-16" />
+        <span className="text-wasteland-400 text-xs">{Math.round(zoom * 100)}%</span>
+        <span className="text-wasteland-500 text-xs">☀️</span>
+        <input type="range" min="20" max="150" value={brightness} onChange={e => setBrightness(parseInt(e.target.value))} className="w-16" />
+        {isMaster && (
+          <button onClick={saveScene} className="text-xs bg-accent-orange hover:bg-orange-500 text-wasteland-900 px-2 py-1 rounded font-bold">💾</button>
         )}
         {error && <span className="text-accent-red text-xs ml-1">{error}</span>}
       </div>
+
+      {/* Снапшоты */}
+      {showSnapshots && (
+        <div className="bg-wasteland-800 p-2 border-b border-wasteland-600 max-h-32 overflow-y-auto">
+          <h4 className="text-wasteland-400 text-xs uppercase mb-1">Снапшоты</h4>
+          {snapshots.length === 0 && <p className="text-wasteland-500 text-xs">Нет снапшотов</p>}
+          {snapshots.map(s => (
+            <div key={s.id} className="flex justify-between items-center bg-wasteland-700 p-1 rounded mb-1 text-xs">
+              <span className="text-wasteland-300">{s.name}</span>
+              <div className="flex gap-1">
+                <button onClick={() => loadSnapshot(s)} className="text-accent-green hover:text-green-400">📥</button>
+                <button onClick={() => deleteSnapshot(s.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Библиотека фонов */}
       {showBgLibrary && isMaster && (
@@ -483,11 +713,12 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       {/* Холст */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-wasteland-800"
+        className="flex-1 overflow-auto bg-wasteland-800 relative"
         style={{ minHeight: '300px', touchAction: isMaster ? 'none' : 'auto' }}
         onWheel={handleWheel}
         onMouseDown={(e) => {
           if (tool === 'note') addNoteToken(e);
+          else if (tool === 'portal') addPortal(e);
           else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
         }}
         onMouseMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
@@ -495,20 +726,16 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         onMouseLeave={() => { endDraw(); endTokenDrag(); }}
         onTouchStart={(e) => {
           if (tool === 'note') addNoteToken(e);
+          else if (tool === 'portal') addPortal(e);
           else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
         }}
         onTouchMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
         onTouchEnd={() => { endDraw(); endTokenDrag(); }}
+        onClick={() => setContextToken(null)}
       >
-        <div className="relative inline-block" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
+        <div className="relative inline-block" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', filter: `brightness(${brightness}%)` }}>
           {selectedBg && (
-            <img
-              ref={bgImageRef}
-              src={selectedBg.url}
-              alt="Фон"
-              className="block max-w-none"
-              draggable={false}
-            />
+            <img ref={bgImageRef} src={selectedBg.url} alt="Фон" className="block max-w-none" draggable={false} />
           )}
           {!selectedBg && (
             <div className="flex items-center justify-center h-64 text-wasteland-500 text-sm" style={{ width: '400px' }}>Выберите фон</div>
@@ -518,18 +745,74 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             className="absolute top-0 left-0"
             style={{ pointerEvents: ['pencil', 'eraser'].includes(tool) ? 'auto' : 'none' }}
           />
+
+          {/* Порталы */}
+          {portalsRef.current.map(portal => (
+            <div
+              key={portal.id}
+              style={getPortalStyle(portal)}
+              onClick={() => { if (portal.targetScene && portal.targetScene !== sceneType) setSceneType(portal.targetScene); }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (isMaster) {
+                  if (confirm('Удалить портал?')) removePortal(portal.id);
+                }
+              }}
+            >
+              {portal.label?.substring(0, 2)}
+            </div>
+          ))}
+
           {/* Токены */}
-          {tokens.map(token => (
+          {tokens.filter(t => !t.hidden || isMaster).map(token => (
             <div
               key={token.id}
               onMouseDown={(e) => startTokenDrag(e, token.id)}
               onTouchStart={(e) => startTokenDrag(e, token.id)}
+              onContextMenu={(e) => handleTokenContext(e, token)}
               onClick={() => { if (token.type === 'note' && token.note) setSelectedNote(token); }}
               style={getTokenStyle(token)}
             >
               {token.label}
+              {token.hidden && isMaster && (
+                <span className="absolute -top-1 -right-1 text-xs">👁‍🗨</span>
+              )}
             </div>
           ))}
+
+          {/* Контекстное меню */}
+          {contextToken && isMaster && (
+            <div
+              className="absolute bg-wasteland-800 border border-wasteland-600 rounded shadow-lg z-50 py-1 min-w-[120px]"
+              style={{ left: contextPos.x, top: contextPos.y }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">
+                {contextToken.label}
+              </div>
+              <button
+                onClick={() => { toggleTokenVisibility(contextToken.id); setContextToken(null); }}
+                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
+              >
+                {contextToken.hidden ? '👁 Показать' : '👁‍🗨 Скрыть'}
+              </button>
+              {getTokenSkills(contextToken).map((skill, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleRollFromToken(contextToken, skill.name, skill.modifier)}
+                  className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300"
+                >
+                  🎲 {skill.name} (+{skill.modifier})
+                </button>
+              ))}
+              <button
+                onClick={() => { removeToken(contextToken.id); setContextToken(null); }}
+                className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red"
+              >
+                🗑️ Удалить
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -558,10 +841,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             <p className="text-wasteland-200 text-sm whitespace-pre-wrap">{selectedNote.note}</p>
             {isMaster && (
               <button
-                onClick={() => {
-                  removeToken(selectedNote.id);
-                  setSelectedNote(null);
-                }}
+                onClick={() => { removeToken(selectedNote.id); setSelectedNote(null); }}
                 className="mt-3 text-xs bg-accent-red/20 hover:bg-accent-red/40 text-accent-red px-2 py-1 rounded"
               >
                 Удалить
