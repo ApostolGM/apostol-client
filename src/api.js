@@ -106,4 +106,32 @@ export const api = {
   uploadBackground: (campaignId, name, url) => request('/upload/background', { method: 'POST', body: JSON.stringify({ campaign_id: campaignId, name, url }) }),
   uploadFile: (image, name, campaignId) => request('/upload/file', { method: 'POST', body: JSON.stringify({ image, name, campaign_id: campaignId }) }),
   getBackgrounds: (campaignId) => request(`/backgrounds/${campaignId}`),
+
+  // Notes
+  getNotes: (campaignId) => request(`/notes/${campaignId}`),
+  createNote: (data) => request('/notes', { method: 'POST', body: JSON.stringify(data) }),
+  updateNote: (id, data) => request(`/notes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteNote: (id) => request(`/notes/${id}`, { method: 'DELETE' }),
+
+  // Handouts
+  getHandouts: (campaignId) => request(`/handouts/${campaignId}`),
+  createHandout: (data) => request('/handouts', { method: 'POST', body: JSON.stringify(data) }),
+  updateHandout: (id, data) => request(`/handouts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteHandout: (id) => request(`/handouts/${id}`, { method: 'DELETE' }),
+
+  // Sounds
+  getSounds: (campaignId) => request(`/sounds/${campaignId}`),
+  createSound: (data) => request('/sounds', { method: 'POST', body: JSON.stringify(data) }),
+  deleteSound: (id) => request(`/sounds/${id}`, { method: 'DELETE' }),
+
+  // Admin
+  getAdminItems: () => request('/admin/items'),
+  updateAdminItem: (id, data) => request(`/admin/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminItem: (id) => request(`/admin/items/${id}`, { method: 'DELETE' }),
+  getAdminPerks: () => request('/admin/perks'),
+  updateAdminPerk: (id, data) => request(`/admin/perks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getAdminProfessions: () => request('/admin/professions'),
+  updateAdminProfession: (id, data) => request(`/admin/professions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getAdminSkills: () => request('/admin/skills'),
+  updateAdminSkill: (id, data) => request(`/admin/skills/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 };
