@@ -161,7 +161,6 @@ export default function Campaign({ user }) {
 
     setInput('');
 
-    // Сохраняем в БД
     try {
       await api.sendChatMessage(id, `🎲 ${formula}`, true);
     } catch (e) { console.error(e); }
@@ -182,7 +181,6 @@ export default function Campaign({ user }) {
     if (!character) return;
     try {
       const result = await api.diceAuto(character.id, skillName);
-      // Сохраняем в БД
       try {
         await api.sendChatMessage(id, `🎲 [${skillName}] ${result.formula}`, true);
       } catch (e) { console.error(e); }
@@ -221,6 +219,13 @@ export default function Campaign({ user }) {
     ...(isMaster ? [{ key: 'npcs', label: 'NPC' }] : []),
   ];
 
+  const formatTime = () => {
+    const d = campaign.game_time_date || '2026-01-01';
+    const h = String(campaign.game_time_hours || 12).padStart(2, '0');
+    const m = String(campaign.game_time_minutes || 0).padStart(2, '0');
+    return `${d} ${h}:${m}`;
+  };
+
   return (
     <div className="h-screen bg-wasteland-900 flex flex-col overflow-hidden">
       <header className="bg-wasteland-800 border-b border-wasteland-600 p-2 md:p-3 flex items-center justify-between flex-shrink-0">
@@ -235,26 +240,26 @@ export default function Campaign({ user }) {
             </button>
           )}
           <span className="text-wasteland-500 text-xs hidden sm:inline">Код: {campaign.invite_code}</span>
+          {isMaster ? (
+            <button onClick={() => {
+              const d = prompt('Дата (ГГГГ-ММ-ДД):', campaign.game_time_date || '2026-01-01');
+              if (!d) return;
+              const h = prompt('Часы (0-23):', campaign.game_time_hours || 12);
+              if (h === null) return;
+              const m = prompt('Минуты (0-59):', campaign.game_time_minutes || 0);
+              if (m === null) return;
+              api.updateCampaignTime(id, { game_time_date: d, game_time_hours: parseInt(h), game_time_minutes: parseInt(m) })
+                .then(() => loadCampaign());
+            }} className="text-xs text-wasteland-400 hover:text-wasteland-200">
+              🕐 {formatTime()}
+            </button>
+          ) : (
+            <span className="text-xs text-wasteland-500">
+              🕐 {formatTime()}
+            </span>
+          )}
         </div>
       </header>
-      {isMaster ? (
-  <button onClick={() => {
-    const d = prompt('Дата (ГГГГ-ММ-ДД):', campaign.game_time_date || '2026-01-01');
-    if (!d) return;
-    const h = prompt('Часы (0-23):', campaign.game_time_hours || 12);
-    if (h === null) return;
-    const m = prompt('Минуты (0-59):', campaign.game_time_minutes || 0);
-    if (m === null) return;
-    api.updateCampaignTime(id, { game_time_date: d, game_time_hours: parseInt(h), game_time_minutes: parseInt(m) })
-      .then(() => loadCampaign());
-  }} className="text-xs text-wasteland-400 hover:text-wasteland-200">
-    🕐 {campaign.game_time_date || '2026-01-01'} {(String(campaign.game_time_hours || 12).padStart(2,'0'))}:{String(campaign.game_time_minutes || 0).padStart(2,'0')}
-  </button>
-) : (
-  <span className="text-xs text-wasteland-500">
-    🕐 {campaign.game_time_date || '2026-01-01'} {(String(campaign.game_time_hours || 12).padStart(2,'0'))}:{String(campaign.game_time_minutes || 0).padStart(2,'0')}
-  </span>
-)}
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -336,16 +341,16 @@ export default function Campaign({ user }) {
 
         <div className="hidden md:block w-64 bg-wasteland-800 border-l border-wasteland-600 p-3 overflow-y-auto flex-shrink-0">
           <h2 className="text-lg font-stylized mb-3 text-wasteland-300">Группа</h2>
-         {campaign.members?.map(m => (
-  <div key={m.user_id} className="text-sm py-1.5 px-2 rounded mb-1 bg-wasteland-700/50">
-    <div className="flex items-center gap-1">
-      {m.role === 'master' && <span>👑</span>}
-      {m.role === 'co-master' && <span>🛡️</span>}
-      <span className="text-wasteland-300">{m.user?.username || m.user_id?.substring(0, 8)}</span>
-    </div>
-    {m.character_id && <span className="text-wasteland-500 text-xs">🎭 В игре</span>}
-  </div>
-))}
+          {campaign.members?.map(m => (
+            <div key={m.user_id} className="text-sm py-1.5 px-2 rounded mb-1 bg-wasteland-700/50">
+              <div className="flex items-center gap-1">
+                {m.role === 'master' && <span>👑</span>}
+                {m.role === 'co-master' && <span>🛡️</span>}
+                <span className="text-wasteland-300">{m.user?.username || m.user_id?.substring(0, 8)}</span>
+              </div>
+              {m.character_id && <span className="text-wasteland-500 text-xs">🎭 В игре</span>}
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -413,7 +418,7 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
       )}
       {step === 2 && (
         <div className="space-y-3">
-          <p className="text-wasteland-300 text-sm">Выберите одну из трёх:</p>
+          <p className="text-wasteland-300 text-sm">Выберите одну из трёх (нельзя вернуться назад):</p>
           {rolledProfs.map(prof => (
             <div key={prof.id} onClick={() => selectProfession(prof)} className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 cursor-pointer hover:border-accent-orange hover:bg-wasteland-700 transition">
               <h3 className="text-accent-orange font-bold">{prof.name}</h3>
@@ -421,6 +426,8 @@ function CharacterCreator({ professions, perks, campaignId, onCreated, onCancel 
               <div className="mt-2 text-xs text-wasteland-400">Навыки: {prof.starter_skills?.map(s => `${s.skill} +${s.modifier}%`).join(', ')}</div>
             </div>
           ))}
+        </div>
+      )}
       {step === 3 && selectedProf && (
         <div className="space-y-4">
           <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
@@ -472,18 +479,11 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
 
   const saveParams = async () => { await onUpdate(params); setEditMode(false); };
 
-  const formatGameTime = () => {
-    const h = String(params.game_time_hours).padStart(2, '0');
-    const m = String(params.game_time_minutes).padStart(2, '0');
-    return `${params.game_time_date} ${h}:${m}`;
-  };
-
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
         <div className="flex justify-between items-start">
           <div><h2 className="text-xl font-stylized text-wasteland-100">{character.name}</h2><p className="text-accent-orange">{character.profession?.name}</p></div>
-          <div className="text-right text-xs text-wasteland-400"><p>Очков: {character.balance_points}</p><p className="text-wasteland-500 mt-1">{formatGameTime()}</p></div>
         </div>
       </div>
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
@@ -499,17 +499,6 @@ function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
             <input type="range" min="0" max="100" value={params[field]} onChange={e => handleSlider(field, e.target.value)} disabled={!isMaster && !editMode} className="w-full h-2 rounded cursor-pointer" style={{ accentColor: color, opacity: isMaster || editMode ? 1 : 0.7 }} />
           </div>
         ))}
-        {editMode && (
-          <div className="mt-4 pt-3 border-t border-wasteland-600">
-            <p className="text-wasteland-400 text-sm mb-2">Игровое время</p>
-            <div className="flex gap-2 text-sm flex-wrap">
-              <input type="date" value={params.game_time_date} onChange={e => handleSlider('game_time_date', e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100" />
-              <input type="number" min="0" max="23" value={params.game_time_hours} onChange={e => handleSlider('game_time_hours', e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 w-16" placeholder="Ч" />
-              <span className="text-wasteland-400 self-center">:</span>
-              <input type="number" min="0" max="59" value={params.game_time_minutes} onChange={e => handleSlider('game_time_minutes', e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 w-16" placeholder="М" />
-            </div>
-          </div>
-        )}
       </div>
       {character.skills?.length > 0 && (
         <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
