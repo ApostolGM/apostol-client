@@ -47,6 +47,7 @@ export const api = {
   createCharacter: (data) => request('/characters', { method: 'POST', body: JSON.stringify(data) }),
   getCharacter: (id) => request(`/characters/${id}`),
   updateCharacterParams: (id, params) => request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
+  deleteCharacter: (id) => request(`/characters/${id}`, { method: 'DELETE' }),
 
   // Master characters
   getCampaignCharacters: (campaignId) => request(`/campaigns/${campaignId}/characters`),
