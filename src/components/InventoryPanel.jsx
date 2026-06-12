@@ -1,11 +1,25 @@
+// src/components/InventoryPanel.jsx
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 
-export default function InventoryPanel({ character, onRefresh }) {
+export default function InventoryPanel({ character, onRefresh, socketRef }) {
   const [inv, setInv] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => { setInv(character?.inventory || []); }, [character]);
+
+  // Слушаем обновления инвентаря через сокет
+  useEffect(() => {
+    if (!socketRef?.current) return;
+    const socket = socketRef.current;
+    const handler = (data) => {
+      if (data.character_id === character?.id) {
+        onRefresh();
+      }
+    };
+    socket.on('inventory_updated', handler);
+    return () => socket.off('inventory_updated', handler);
+  }, [socketRef, character?.id, onRefresh]);
 
   const totalWeight = inv.reduce((s, sl) => s + (sl.item?.weight || 0) * (sl.quantity || 1), 0);
   const maxWeight = character?.carry_weight_max || 50;
