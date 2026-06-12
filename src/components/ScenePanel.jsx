@@ -1,3 +1,4 @@
+// src/components/ScenePanel.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
 
@@ -181,21 +182,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  const saveScene = async () => {
-    setError('');
-    try {
-      await api.updateScene(campaignId, {
-        scene_type: sceneType,
-        background_url: selectedBg?.url || null,
-        tokens,
-        drawings: drawingsRef.current,
-        portals: portalsRef.current,
-        fog_of_war: [],
-      });
-      if (socketRef?.current) {
-        socketRef.current.emit('scene_update', { campaignId, sceneType, updates: {} });
-      }
-    } catch (e) { setError(e.message); }
+  // Автосохранение сцены через WebSocket (без API-запроса)
+  const autoSaveScene = () => {
+    if (socketRef?.current) {
+      socketRef.current.emit('scene_update', { campaignId, sceneType, updates: {} });
+    }
   };
 
   const syncAll = () => {
@@ -204,26 +195,36 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
       socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
       socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: portalsRef.current });
     }
+    autoSaveScene();
   };
 
   const syncTokens = (newTokens) => {
     setTokens(newTokens);
     const newState = { tokens: newTokens, drawings: drawingsRef.current, portals: portalsRef.current };
     pushHistory(newState);
-    if (socketRef?.current) socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
+    if (socketRef?.current) {
+      socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
+      socketRef.current.emit('scene_update', { campaignId, sceneType, updates: { tokens: newTokens } });
+    }
   };
 
   const syncDrawings = () => {
     const newState = { tokens, drawings: drawingsRef.current, portals: portalsRef.current };
     pushHistory(newState);
-    if (socketRef?.current) socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
+    if (socketRef?.current) {
+      socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
+      socketRef.current.emit('scene_update', { campaignId, sceneType, updates: { drawings: drawingsRef.current } });
+    }
   };
 
   const syncPortals = (newPortals) => {
     portalsRef.current = newPortals;
     const newState = { tokens, drawings: drawingsRef.current, portals: newPortals };
     pushHistory(newState);
-    if (socketRef?.current) socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
+    if (socketRef?.current) {
+      socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
+      socketRef.current.emit('scene_update', { campaignId, sceneType, updates: { portals: newPortals } });
+    }
   };
 
   // Снапшоты
@@ -492,7 +493,10 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (draggedToken.current) {
       const newState = { tokens, drawings: drawingsRef.current, portals: portalsRef.current };
       pushHistory(newState);
-      if (socketRef?.current) socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
+      if (socketRef?.current) {
+        socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
+        socketRef.current.emit('scene_update', { campaignId, sceneType, updates: { tokens } });
+      }
     }
     draggedToken.current = null;
   };
@@ -584,9 +588,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         <span className="text-wasteland-400 text-xs">{Math.round(zoom * 100)}%</span>
         <span className="text-wasteland-500 text-xs">☀️</span>
         <input type="range" min="20" max="150" value={brightness} onChange={e => setBrightness(parseInt(e.target.value))} className="w-16" />
-        {isMaster && (
-          <button onClick={saveScene} className="text-xs bg-accent-orange hover:bg-orange-500 text-wasteland-900 px-2 py-1 rounded font-bold">💾</button>
-        )}
         {error && <span className="text-accent-red text-xs ml-1">{error}</span>}
       </div>
 
