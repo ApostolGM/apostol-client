@@ -25,24 +25,17 @@ export default function AdminPanel() {
   const load = async () => {
     setLoading(true);
     const [i, p, prof, s, at, cur, usr, sp, bg, sd] = await Promise.all([
-     api.getAmmoTypes()
-api.getCurrencies()
-api.getAdminUsers()
-api.getShopPresets()
-api.getAdminBackgrounds()
-api.getAdminSounds()
-api.createAdminItem(newItem)
-api.post('/admin/items/batch-delete', { ids: selectedIds })
-api.put('/admin/items/batch-price', { ids: selectedIds, trade_price: batchPrice })
-api.updateAdminUser(u.id, u.role === 'admin' ? 'player' : 'admin')
-api.fetch('/admin/perks/' + id, { method: 'DELETE' })
-api.fetch('/admin/professions/' + id, { method: 'DELETE' })
-api.fetch('/admin/skills/' + id, { method: 'DELETE' })
-api.deleteAmmoType(item.id)
-api.deleteCurrency(item.id)
-api.deleteAdminUser(u.id)
-api.deleteAdminBackground(bg.id)
-api.deleteAdminSound(s.id)
+      api.getAdminItems(),
+      api.getAdminPerks(),
+      api.getAdminProfessions(),
+      api.getAdminSkills(),
+      api.getAmmoTypes(),
+      api.getCurrencies(),
+      api.getAdminUsers(),
+      api.getShopPresets(),
+      api.getAdminBackgrounds(),
+      api.getAdminSounds(),
+    ]);
     setItems(i); setPerks(p); setProfessions(prof); setSkills(s);
     setAmmoTypes(at); setCurrencies(cur); setUsers(usr); setShopPresets(sp);
     setGlobalBackgrounds(bg); setGlobalSounds(sd);
@@ -67,18 +60,15 @@ api.deleteAdminSound(s.id)
 
   const handleDelete = async (type, id) => {
     if (!confirm('Удалить?')) return;
-    const endpoints = {
-      items: api.deleteAdminItem,
-      perks: () => api.fetch('/admin/perks/' + id, { method: 'DELETE' }),
-      professions: () => api.fetch('/admin/professions/' + id, { method: 'DELETE' }),
-      skills: () => api.fetch('/admin/skills/' + id, { method: 'DELETE' }),
-    };
-    if (endpoints[type]) await endpoints[type](id);
+    if (type === 'items') await api.deleteAdminItem(id);
+    else if (type === 'perks') await api.fetch('/admin/perks/' + id, { method: 'DELETE' });
+    else if (type === 'professions') await api.fetch('/admin/professions/' + id, { method: 'DELETE' });
+    else if (type === 'skills') await api.fetch('/admin/skills/' + id, { method: 'DELETE' });
     load();
   };
 
   const handleCreateItem = async () => {
-    await api.post('/admin/items', newItem);
+    await api.createAdminItem(newItem);
     setNewItem({ name: '', slot: 'item', weight: 0, condition_percent: 100, description: '', trade_price: 0 });
     setShowForm(false);
     load();
@@ -327,7 +317,7 @@ api.deleteAdminSound(s.id)
           {ammoTypes.map(item => (
             <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
               <span className="text-wasteland-200">{item.name}</span>
-              <button onClick={() => { api.fetch('/ammo-types/' + item.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400">🗑️</button>
+              <button onClick={() => api.deleteAmmoType(item.id).then(load)} className="text-accent-red hover:text-red-400">🗑️</button>
             </div>
           ))}
         </div>
@@ -339,7 +329,7 @@ api.deleteAdminSound(s.id)
           {currencies.map(item => (
             <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
               <span className="text-wasteland-200">{item.icon} {item.name}</span>
-              <button onClick={() => { api.fetch('/currencies/' + item.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400">🗑️</button>
+              <button onClick={() => api.deleteCurrency(item.id).then(load)} className="text-accent-red hover:text-red-400">🗑️</button>
             </div>
           ))}
         </div>
@@ -369,10 +359,10 @@ api.deleteAdminSound(s.id)
                 <span className={`ml-2 ${u.role === 'admin' ? 'text-accent-orange' : 'text-wasteland-500'}`}>{u.role}</span>
               </div>
               <div className="flex gap-1">
-                <button onClick={() => { api.put('/admin/users/' + u.id, { role: u.role === 'admin' ? 'player' : 'admin' }).then(load); }} className="text-wasteland-400 hover:text-wasteland-200 text-xs">
+                <button onClick={() => api.updateAdminUser(u.id, u.role === 'admin' ? 'player' : 'admin').then(load)} className="text-wasteland-400 hover:text-wasteland-200 text-xs">
                   {u.role === 'admin' ? '→ player' : '→ admin'}
                 </button>
-                <button onClick={() => { if (confirm('Удалить пользователя?')) api.fetch('/admin/users/' + u.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400 text-xs">🗑️</button>
+                <button onClick={() => { if (confirm('Удалить пользователя?')) api.deleteAdminUser(u.id).then(load); }} className="text-accent-red hover:text-red-400 text-xs">🗑️</button>
               </div>
             </div>
           ))}
@@ -385,7 +375,7 @@ api.deleteAdminSound(s.id)
           {globalBackgrounds.map(bg => (
             <div key={bg.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
               <span className="text-wasteland-200">{bg.name}</span>
-              <button onClick={() => { api.fetch('/admin/backgrounds/' + bg.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400">🗑️</button>
+              <button onClick={() => api.deleteAdminBackground(bg.id).then(load)} className="text-accent-red hover:text-red-400">🗑️</button>
             </div>
           ))}
         </div>
@@ -397,7 +387,7 @@ api.deleteAdminSound(s.id)
           {globalSounds.map(s => (
             <div key={s.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
               <span className="text-wasteland-200">{s.name}</span>
-              <button onClick={() => { api.fetch('/admin/sounds/' + s.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400">🗑️</button>
+              <button onClick={() => api.deleteAdminSound(s.id).then(load)} className="text-accent-red hover:text-red-400">🗑️</button>
             </div>
           ))}
         </div>
