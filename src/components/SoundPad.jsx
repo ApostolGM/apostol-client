@@ -1,3 +1,4 @@
+// src/components/SoundPad.jsx
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 
@@ -9,6 +10,7 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
   const [playing, setPlaying] = useState(null);
   const [volume, setVolume] = useState(0.8);
   const [muted, setMuted] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const audioRef = useRef(null);
 
   const load = async () => {
@@ -77,12 +79,36 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
     }
   };
 
-  const handleAdd = async () => {
+  const handleAddByUrl = async () => {
     if (!form.name || !form.file_url) return;
     await api.createSound({ ...form, campaign_id: campaignId });
     setForm({ name: '', file_url: '', category: 'ambient' });
     setShowForm(false);
     load();
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 40 * 1024 * 1024) {
+      alert('Файл слишком большой. Максимум 40 МБ.');
+      return;
+    }
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const result = await api.uploadSound(reader.result, form.name || file.name, campaignId, false);
+        setForm({ name: '', file_url: '', category: 'ambient' });
+        setShowForm(false);
+        load();
+      } catch (err) {
+        alert('Ошибка загрузки: ' + (err.message || 'Неизвестная ошибка'));
+      } finally {
+        setUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleDelete = async (id) => {
@@ -122,7 +148,17 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
       {showForm && isMaster && (
         <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 space-y-3">
           <input placeholder="Название" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm" />
-          <input placeholder="URL аудиофайла" value={form.file_url} onChange={e => setForm({ ...form, file_url: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm" />
+
+          <div className="flex gap-2 items-center flex-wrap">
+            <label className="bg-accent-orange hover:bg-orange-500 text-wasteland-900 text-xs font-bold px-4 py-2 rounded cursor-pointer text-center">
+              {uploading ? 'Загрузка...' : '📁 Выбрать файл'}
+              <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+            </label>
+            <span className="text-wasteland-500 text-xs">или URL:</span>
+          </div>
+
+          <input placeholder="URL аудиофайла (если не загружаете файл)" value={form.file_url} onChange={e => setForm({ ...form, file_url: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm" />
+
           <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm">
             <option value="ambient">Эмбиент</option>
             <option value="combat">Бой</option>
@@ -130,7 +166,9 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
             <option value="sfx">Эффекты</option>
             <option value="общее">Общее</option>
           </select>
-          <button onClick={handleAdd} className="bg-accent-orange text-wasteland-900 font-bold px-4 py-2 rounded text-sm">Добавить</button>
+          <button onClick={handleAddByUrl} disabled={!form.file_url || uploading} className="bg-accent-orange text-wasteland-900 font-bold px-4 py-2 rounded text-sm disabled:opacity-50">
+            Добавить по URL
+          </button>
         </div>
       )}
 
