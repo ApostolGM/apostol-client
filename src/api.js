@@ -51,8 +51,6 @@ export const api = {
   getCampaign: (id) => request(`/campaigns/${id}`),
   createCampaign: (title) => request('/campaigns', { method: 'POST', body: JSON.stringify({ title }) }),
   joinCampaign: (code) => request(`/campaigns/join/${code}`, { method: 'POST' }),
-
-  // Campaign time
   updateCampaignTime: (campaignId, data) => request(`/campaigns/${campaignId}/time`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Chat
@@ -61,11 +59,7 @@ export const api = {
 
   // Professions
   getProfessions: () => request('/professions'),
-
-  // Perks
   getPerks: () => request('/perks'),
-
-  // Skills
   getSkills: () => request('/skills'),
 
   // Characters
@@ -73,11 +67,10 @@ export const api = {
   getCharacter: (id) => request(`/characters/${id}`),
   updateCharacterParams: (id, params) => request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
   deleteCharacter: (id) => request(`/characters/${id}`, { method: 'DELETE' }),
-
-  // Master characters
+  getCharacterWeight: (charId) => request(`/characters/${charId}/weight`),
   getCampaignCharacters: (campaignId) => request(`/campaigns/${campaignId}/characters`),
 
-  // Character skills (master)
+  // Character skills
   addCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills`, { method: 'POST', body: JSON.stringify({ skill_id: skillId, modifier }) }),
   updateCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills/${skillId}`, { method: 'PUT', body: JSON.stringify({ modifier }) }),
   deleteCharacterSkill: (charId, skillId) => request(`/characters/${charId}/skills/${skillId}`, { method: 'DELETE' }),
@@ -109,8 +102,8 @@ export const api = {
     request('/inventory/unequip', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
   useItem: (slotId) =>
     request('/inventory/use', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
-  reloadWeapon: (slotId) =>
-    request('/inventory/reload', { method: 'POST', body: JSON.stringify({ slot_id: slotId }) }),
+  reloadWeapon: (slotId, ammoTypeId) =>
+    request('/inventory/reload', { method: 'POST', body: JSON.stringify({ slot_id: slotId, ammo_type_id: ammoTypeId }) }),
 
   // Master inventory
   updateInventorySlot: (slotId, data) => request(`/inventory/${slotId}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -126,9 +119,9 @@ export const api = {
   updateScene: (campaignId, data) => request(`/scenes/${campaignId}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Backgrounds
-  uploadBackground: (campaignId, name, url) => request('/backgrounds', { method: 'POST', body: JSON.stringify({ campaign_id: campaignId, name, url }) }),
-  uploadFile: (image, name, campaignId) => request('/upload/file', { method: 'POST', body: JSON.stringify({ image, name, campaign_id: campaignId }) }),
   getBackgrounds: (campaignId) => request(`/backgrounds/${campaignId}`),
+  uploadBackground: (data) => request('/upload/background', { method: 'POST', body: JSON.stringify(data) }),
+  uploadFile: (image, name, campaignId) => request('/upload/file', { method: 'POST', body: JSON.stringify({ image, name, campaign_id: campaignId }) }),
 
   // Notes
   getNotes: (campaignId) => request(`/notes/${campaignId}`),
@@ -147,14 +140,54 @@ export const api = {
   createSound: (data) => request('/sounds', { method: 'POST', body: JSON.stringify(data) }),
   deleteSound: (id) => request(`/sounds/${id}`, { method: 'DELETE' }),
 
+  // Shop
+  getShop: () => request('/shop'),
+  getShopPresets: () => request('/shop/presets'),
+  createShopPreset: (data) => request('/shop/presets', { method: 'POST', body: JSON.stringify(data) }),
+  updateShopPreset: (id, data) => request(`/shop/presets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteShopPreset: (id) => request(`/shop/presets/${id}`, { method: 'DELETE' }),
+  buyItem: (characterId, itemId, quantity) => request('/shop/buy', { method: 'POST', body: JSON.stringify({ character_id: characterId, item_id: itemId, quantity }) }),
+
+  // Ammo types
+  getAmmoTypes: () => request('/ammo-types'),
+  createAmmoType: (data) => request('/ammo-types', { method: 'POST', body: JSON.stringify(data) }),
+  updateAmmoType: (id, data) => request(`/ammo-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAmmoType: (id) => request(`/ammo-types/${id}`, { method: 'DELETE' }),
+
+  // Currencies
+  getCurrencies: () => request('/currencies'),
+  createCurrency: (data) => request('/currencies', { method: 'POST', body: JSON.stringify(data) }),
+  deleteCurrency: (id) => request(`/currencies/${id}`, { method: 'DELETE' }),
+
   // Admin
   getAdminItems: () => request('/admin/items'),
+  createAdminItem: (data) => request('/admin/items', { method: 'POST', body: JSON.stringify(data) }),
   updateAdminItem: (id, data) => request(`/admin/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAdminItem: (id) => request(`/admin/items/${id}`, { method: 'DELETE' }),
+  batchDeleteItems: (ids) => request('/admin/items/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+  batchUpdatePrice: (ids, trade_price) => request('/admin/items/batch-price', { method: 'PUT', body: JSON.stringify({ ids, trade_price }) }),
+
   getAdminPerks: () => request('/admin/perks'),
+  createAdminPerk: (data) => request('/admin/perks', { method: 'POST', body: JSON.stringify(data) }),
   updateAdminPerk: (id, data) => request(`/admin/perks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminPerk: (id) => request(`/admin/perks/${id}`, { method: 'DELETE' }),
+
   getAdminProfessions: () => request('/admin/professions'),
+  createAdminProfession: (data) => request('/admin/professions', { method: 'POST', body: JSON.stringify(data) }),
   updateAdminProfession: (id, data) => request(`/admin/professions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminProfession: (id) => request(`/admin/professions/${id}`, { method: 'DELETE' }),
+
   getAdminSkills: () => request('/admin/skills'),
+  createAdminSkill: (data) => request('/admin/skills', { method: 'POST', body: JSON.stringify(data) }),
   updateAdminSkill: (id, data) => request(`/admin/skills/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminSkill: (id) => request(`/admin/skills/${id}`, { method: 'DELETE' }),
+
+  getAdminUsers: () => request('/admin/users'),
+  updateAdminUser: (id, data) => request(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdminUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+
+  getAdminBackgrounds: () => request('/admin/backgrounds'),
+  deleteAdminBackground: (id) => request(`/admin/backgrounds/${id}`, { method: 'DELETE' }),
+  getAdminSounds: () => request('/admin/sounds'),
+  deleteAdminSound: (id) => request(`/admin/sounds/${id}`, { method: 'DELETE' }),
 };
