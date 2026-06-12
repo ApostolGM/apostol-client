@@ -41,7 +41,6 @@ async function request(path, options = {}) {
 
 export { ApiError };
 export const api = {
-  // Базовые методы
   fetch: (path, options = {}) => request(path, options),
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
@@ -134,6 +133,15 @@ export const api = {
   uploadFile: (image, name, campaignId) => request('/upload/file', { method: 'POST', body: JSON.stringify({ image, name, campaign_id: campaignId }) }),
   getBackgrounds: (campaignId) => request(`/backgrounds/${campaignId}`),
 
+  // Sounds
+  getSounds: (campaignId) => request(`/sounds/${campaignId}`),
+  createSound: (data) => request('/sounds', { method: 'POST', body: JSON.stringify(data) }),
+  deleteSound: (id) => request(`/sounds/${id}`, { method: 'DELETE' }),
+
+  // Upload sound (Cloudinary)
+  uploadSound: (soundData, name, campaignId, isGlobal) =>
+    request('/upload/sound', { method: 'POST', body: JSON.stringify({ sound_data: soundData, name, campaign_id: campaignId, is_global: isGlobal }) }),
+
   // Notes
   getNotes: (campaignId) => request(`/notes/${campaignId}`),
   createNote: (data) => request('/notes', { method: 'POST', body: JSON.stringify(data) }),
@@ -145,11 +153,6 @@ export const api = {
   createHandout: (data) => request('/handouts', { method: 'POST', body: JSON.stringify(data) }),
   updateHandout: (id, data) => request(`/handouts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteHandout: (id) => request(`/handouts/${id}`, { method: 'DELETE' }),
-
-  // Sounds
-  getSounds: (campaignId) => request(`/sounds/${campaignId}`),
-  createSound: (data) => request('/sounds', { method: 'POST', body: JSON.stringify(data) }),
-  deleteSound: (id) => request(`/sounds/${id}`, { method: 'DELETE' }),
 
   // Shop
   getShop: () => request('/shop'),
