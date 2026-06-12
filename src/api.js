@@ -1,7 +1,16 @@
+// src/api.js
 const API_URL = 'https://apostol-api.onrender.com/api';
 
 function getToken() {
   return localStorage.getItem('token');
+}
+
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+    this.name = 'ApiError';
+  }
 }
 
 async function request(path, options = {}) {
@@ -11,12 +20,26 @@ async function request(path, options = {}) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Ошибка запроса');
+
+  let res;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  } catch {
+    throw new ApiError('Сетевая ошибка. Проверьте подключение.', 0);
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError('Ошибка обработки ответа сервера', res.status);
+  }
+
+  if (!res.ok) throw new ApiError(data.error || 'Ошибка запроса', res.status);
   return data;
 }
 
+export { ApiError };
 export const api = {
   // Auth
   register: (u, p) => request('/auth/register', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
@@ -103,7 +126,7 @@ export const api = {
   updateScene: (campaignId, data) => request(`/scenes/${campaignId}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Backgrounds
-  uploadBackground: (campaignId, name, url) => request('/upload/background', { method: 'POST', body: JSON.stringify({ campaign_id: campaignId, name, url }) }),
+  uploadBackground: (campaignId, name, url) => request('/backgrounds', { method: 'POST', body: JSON.stringify({ campaign_id: campaignId, name, url }) }),
   uploadFile: (image, name, campaignId) => request('/upload/file', { method: 'POST', body: JSON.stringify({ image, name, campaign_id: campaignId }) }),
   getBackgrounds: (campaignId) => request(`/backgrounds/${campaignId}`),
 
