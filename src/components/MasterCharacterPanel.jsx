@@ -1,3 +1,4 @@
+// src/components/MasterCharacterPanel.jsx
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 
@@ -7,16 +8,19 @@ export default function MasterCharacterPanel({ campaignId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [allSkills, setAllSkills] = useState([]);
+  const [allItems, setAllItems] = useState([]);
 
   const load = async () => {
     try {
       setError('');
-      const [chars, skills] = await Promise.all([
+      const [chars, skills, items] = await Promise.all([
         api.getCampaignCharacters(campaignId),
-        api.getSkills()
+        api.getSkills(),
+        api.getItems(),
       ]);
       setCharacters(chars);
       setAllSkills(skills || []);
+      setAllItems(items || []);
     } catch (e) {
       setError(e.message);
       console.error(e);
@@ -151,7 +155,11 @@ export default function MasterCharacterPanel({ campaignId }) {
                   <h4 className="text-wasteland-400 text-xs uppercase mb-1">Перки</h4>
                   <div className="flex flex-wrap gap-1">
                     {char.perks.map(p => (
-                      <span key={p.id} className={`text-xs px-1.5 py-0.5 rounded ${p.type === 'positive' ? 'bg-accent-green/20 text-accent-green' : p.type === 'negative' ? 'bg-accent-red/20 text-accent-red' : 'bg-wasteland-700 text-wasteland-300'}`}>
+                      <span key={p.id} className={`text-xs px-1.5 py-0.5 rounded ${
+                        p.type === 'positive' ? 'bg-accent-green/20 text-accent-green' :
+                        p.type === 'negative' ? 'bg-accent-red/20 text-accent-red' :
+                        'bg-wasteland-700 text-wasteland-300'
+                      }`}>
                         {p.name}
                       </span>
                     ))}
@@ -161,7 +169,7 @@ export default function MasterCharacterPanel({ campaignId }) {
 
               <div>
                 <h4 className="text-wasteland-400 text-xs uppercase mb-2">Инвентарь</h4>
-                <MasterInventory charId={char.id} inventory={char.inventory || []} onRefresh={load} />
+                <MasterInventory charId={char.id} inventory={char.inventory || []} allItems={allItems} onRefresh={load} />
               </div>
             </div>
           )}
@@ -232,22 +240,16 @@ function AddSkillButton({ allSkills, existingSkills, onAdd }) {
 
 function SliderRow({ label, value, color, onChange }) {
   const [localValue, setLocalValue] = useState(value);
+  useEffect(() => { setLocalValue(value); }, [value]);
 
-  useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
-
-  const handleMouseUp = () => {
-    onChange(localValue);
-  };
+  const handleMouseUp = () => { onChange(localValue); };
 
   return (
     <div className="flex items-center gap-2 mb-1">
       <span className="text-wasteland-400 text-xs w-12">{label}</span>
       <input
         type="range"
-        min="0"
-        max="100"
+        min="0" max="100"
         value={localValue}
         onChange={(e) => setLocalValue(parseInt(e.target.value))}
         onMouseUp={handleMouseUp}
@@ -260,13 +262,15 @@ function SliderRow({ label, value, color, onChange }) {
   );
 }
 
-function MasterInventory({ charId, inventory, onRefresh }) {
-  const [allItems, setAllItems] = useState([]);
+function MasterInventory({ charId, inventory, allItems, onRefresh }) {
   const [showAdd, setShowAdd] = useState(false);
   const [selectedItem, setSelectedItem] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [weightInfo, setWeightInfo] = useState(null);
 
-  useEffect(() => { api.getItems().then(setAllItems).catch(console.error); }, []);
+  useEffect(() => {
+    api.getCharacterWeight(charId).then(setWeightInfo).catch(() => {});
+  }, [charId, inventory]);
 
   const handleAdd = async () => {
     if (!selectedItem) return;
@@ -292,14 +296,31 @@ function MasterInventory({ charId, inventory, onRefresh }) {
     onRefresh();
   };
 
-  const handleAddMod = async (slotId) => {
-    const modItems = allItems.filter(i => i.type === 'модификация');
-    if (modItems.length === 0) { alert('Нет модификаций в базе'); return; }
-    const modList = modItems.map(i => `${i.name} (${i.id})`).join('\n');
-    const modId = prompt(`ID модификации:\n${modList}`);
+  const handleAddMod = async (slotId, slotItem) => {
+    const targetSlot = slotItem?.slot;
+    const weaponType = slotItem?.weapon_type;
+    const availableMods = allItems.filter(i => {
+      if (i.slot !== 'mod') return false;
+      if (i.mod_target === 'any') return true;
+      if (i.mod_target !== targetSlot) return false;
+      if (i.mod_target === 'weapon' && i.weapon_mod_subtype && i.weapon_mod_subtype !== 'any' && i.weapon_mod_subtype !== weaponType) return false;
+      return true;
+    });
+
+    if (availableMods.length === 0) {
+      alert('Нет подходящих модификаций');
+      return;
+    }
+
+    const modList = availableMods.map(m => `${m.name} (${m.id.substring(0, 8)})`).join('\n');
+    const modId = prompt(`Доступные модификации:\n${modList}\n\nВведите ID модификации:`);
     if (modId) {
-      await api.addMod(slotId, modId.trim());
-      onRefresh();
+      try {
+        await api.addMod(slotId, modId.trim());
+        onRefresh();
+      } catch (e) {
+        alert(e.message);
+      }
     }
   };
 
@@ -313,11 +334,27 @@ function MasterInventory({ charId, inventory, onRefresh }) {
 
   return (
     <div className="space-y-2">
+      {weightInfo && (
+        <div className="bg-wasteland-700 p-2 rounded text-xs">
+          <span className="text-wasteland-400">Вес: </span>
+          <span className={`font-bold ${
+            weightInfo.percent > 110 ? 'text-accent-red' :
+            weightInfo.percent > 85 ? 'text-accent-yellow' :
+            'text-wasteland-300'
+          }`}>
+            {weightInfo.totalWeight.toFixed(1)} / {weightInfo.maxWeight} кг ({weightInfo.percent}%)
+          </span>
+          {weightInfo.penalty.label !== 'Норма' && (
+            <span className="text-accent-red ml-2">⚠️ {weightInfo.penalty.label}</span>
+          )}
+        </div>
+      )}
+
       {showAdd && (
         <div className="flex gap-1 items-center mb-2">
           <select value={selectedItem} onChange={e => setSelectedItem(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1">
             <option value="">Выбрать...</option>
-            {allItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+            {allItems.map(i => <option key={i.id} value={i.id}>{i.name} ({i.slot})</option>)}
           </select>
           <input type="number" min="1" max="99" value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 1)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs w-12" />
           <button onClick={handleAdd} className="bg-accent-orange text-wasteland-900 text-xs px-2 py-1 rounded">OK</button>
@@ -346,16 +383,11 @@ function MasterSlotRow({ slot, onConditionChange, onQuantityChange, onRemove, on
   const [localCond, setLocalCond] = useState(condition);
   const [qty, setQty] = useState(slot.quantity || 1);
 
-  useEffect(() => {
-    setLocalCond(condition);
-    setQty(slot.quantity || 1);
-  }, [condition, slot.quantity]);
+  useEffect(() => { setLocalCond(condition); setQty(slot.quantity || 1); }, [condition, slot.quantity]);
 
-  const handleQtyBlur = () => {
-    if (qty !== slot.quantity) {
-      onQuantityChange(slot.id, qty);
-    }
-  };
+  const handleQtyBlur = () => { if (qty !== slot.quantity) onQuantityChange(slot.id, qty); };
+
+  const isRanged = item?.slot === 'weapon' && item?.weapon_type === 'ranged';
 
   return (
     <div className="bg-wasteland-700 p-2 rounded text-xs">
@@ -363,46 +395,35 @@ function MasterSlotRow({ slot, onConditionChange, onQuantityChange, onRemove, on
         <span className="text-wasteland-200 font-bold">{item?.name}</span>
         <div className="flex items-center gap-1">
           <span className="text-wasteland-400">{slot.equipped ? '⚡' : ''}</span>
-          <input
-            type="number"
-            value={qty}
-            onChange={e => setQty(parseInt(e.target.value) || 1)}
-            onBlur={handleQtyBlur}
-            className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 text-xs w-10 text-center"
-            min="1"
-          />
+          <input type="number" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} onBlur={handleQtyBlur} className="bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 text-xs w-10 text-center" min="1" />
           <button onClick={() => onRemove(slot.id)} className="text-accent-red hover:text-red-400 ml-1" title="Удалить">✕</button>
         </div>
       </div>
+      <div className="flex flex-wrap gap-x-2 text-xs mt-0.5 text-wasteland-500">
+        <span>{item?.slot}</span>
+        {isRanged && <span>🔫 {item?.current_ammo}/{item?.max_ammo}</span>}
+        {item?.ammo_type && <span>({item.ammo_type?.name})</span>}
+        <span>{item?.weight} кг</span>
+      </div>
       <div className="flex items-center gap-2 mt-1">
         <span className="text-wasteland-500">Состояние:</span>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={localCond}
-          onChange={(e) => setLocalCond(parseInt(e.target.value))}
-          onMouseUp={() => onConditionChange(slot.id, localCond)}
-          onTouchEnd={() => onConditionChange(slot.id, localCond)}
-          className="flex-1 h-1 rounded"
-          style={{ accentColor: localCond > 50 ? '#33cc33' : localCond > 20 ? '#cc6600' : '#cc3333' }}
-        />
+        <input type="range" min="0" max="100" value={localCond} onChange={(e) => setLocalCond(parseInt(e.target.value))} onMouseUp={() => onConditionChange(slot.id, localCond)} onTouchEnd={() => onConditionChange(slot.id, localCond)} className="flex-1 h-1 rounded" style={{ accentColor: localCond > 50 ? '#33cc33' : localCond > 20 ? '#cc6600' : '#cc3333' }} />
         <span className="text-wasteland-300 w-8">{localCond}%</span>
       </div>
 
-      <div className="mt-1">
+      <div className="mt-1 flex items-center gap-2">
         <button onClick={() => setShowMods(!showMods)} className="text-wasteland-400 hover:text-wasteland-200 text-xs">
-          {showMods ? '▲' : '▼'} Модификации ({(slot.mods || []).length})
+          {showMods ? '▲' : '▼'} Моды ({(slot.mods || []).length})
         </button>
+        <button onClick={() => onAddMod(slot.id, item)} className="text-accent-green text-xs hover:underline">+ Мод</button>
         {showMods && (
-          <div className="mt-1 space-y-1">
+          <div className="mt-1 space-y-1 w-full">
             {(slot.mods || []).map(mod => (
               <div key={mod.id} className="flex justify-between items-center bg-wasteland-800 p-1 rounded">
                 <span className="text-wasteland-300">{mod.name}</span>
                 <button onClick={() => onRemoveMod(slot.id, mod.id)} className="text-accent-red text-xs">✕</button>
               </div>
             ))}
-            <button onClick={() => onAddMod(slot.id)} className="text-accent-green text-xs hover:underline">+ Добавить</button>
           </div>
         )}
       </div>
