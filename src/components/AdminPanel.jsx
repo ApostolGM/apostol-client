@@ -25,17 +25,24 @@ export default function AdminPanel() {
   const load = async () => {
     setLoading(true);
     const [i, p, prof, s, at, cur, usr, sp, bg, sd] = await Promise.all([
-      api.getAdminItems(),
-      api.getAdminPerks(),
-      api.getAdminProfessions(),
-      api.getAdminSkills(),
-      api.get('/ammo-types').then(r => r).catch(() => []),
-      api.get('/currencies').then(r => r).catch(() => []),
-      api.get('/admin/users').then(r => r).catch(() => []),
-      api.get('/shop/presets').then(r => r).catch(() => []),
-      api.get('/admin/backgrounds').then(r => r).catch(() => []),
-      api.get('/admin/sounds').then(r => r).catch(() => []),
-    ]);
+     api.getAmmoTypes()
+api.getCurrencies()
+api.getAdminUsers()
+api.getShopPresets()
+api.getAdminBackgrounds()
+api.getAdminSounds()
+api.createAdminItem(newItem)
+api.post('/admin/items/batch-delete', { ids: selectedIds })
+api.put('/admin/items/batch-price', { ids: selectedIds, trade_price: batchPrice })
+api.updateAdminUser(u.id, u.role === 'admin' ? 'player' : 'admin')
+api.fetch('/admin/perks/' + id, { method: 'DELETE' })
+api.fetch('/admin/professions/' + id, { method: 'DELETE' })
+api.fetch('/admin/skills/' + id, { method: 'DELETE' })
+api.deleteAmmoType(item.id)
+api.deleteCurrency(item.id)
+api.deleteAdminUser(u.id)
+api.deleteAdminBackground(bg.id)
+api.deleteAdminSound(s.id)
     setItems(i); setPerks(p); setProfessions(prof); setSkills(s);
     setAmmoTypes(at); setCurrencies(cur); setUsers(usr); setShopPresets(sp);
     setGlobalBackgrounds(bg); setGlobalSounds(sd);
