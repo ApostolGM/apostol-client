@@ -516,7 +516,7 @@ export default function Campaign({ user }) {
           {/* Инвентарь */}
           {activeTab === 'inventory' && !isMaster && character && (
             <div className="flex-1 overflow-y-auto p-3 min-h-0">
-              <InventoryPanel character={character} onRefresh={refreshCharacter} />
+            <InventoryPanel character={character} onRefresh={refreshCharacter} socketRef={socketRef} />
             </div>
           )}
           {activeTab === 'inventory' && !isMaster && !character && (
