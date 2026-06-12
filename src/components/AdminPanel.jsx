@@ -8,84 +8,92 @@ export default function AdminPanel() {
   const [perks, setPerks] = useState([]);
   const [professions, setProfessions] = useState([]);
   const [skills, setSkills] = useState([]);
-  const [users, setUsers] = useState([]);
   const [ammoTypes, setAmmoTypes] = useState([]);
   const [currencies, setCurrencies] = useState([]);
+  const [users, setUsers] = useState([]);
   const [shopPresets, setShopPresets] = useState([]);
-  const [backgrounds, setBackgrounds] = useState([]);
-  const [sounds, setSounds] = useState([]);
+  const [globalBackgrounds, setGlobalBackgrounds] = useState([]);
+  const [globalSounds, setGlobalSounds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [showForm, setShowForm] = useState(false);
-  const [formType, setFormType] = useState(''); // 'items','perks','professions','skills','users','ammo','currency','preset'
-  const [selected, setSelected] = useState([]);
-  const [batchPrice, setBatchPrice] = useState('');
+  const [newItem, setNewItem] = useState({ name: '', slot: 'item', weight: 0, condition_percent: 100, description: '', trade_price: 0 });
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [batchPrice, setBatchPrice] = useState(0);
 
-  const loadAll = async () => {
+  const load = async () => {
     setLoading(true);
-    const [i, p, prof, s, u, a, c, ps, bg, sd] = await Promise.all([
-      api.getAdminItems(), api.getAdminPerks(), api.getAdminProfessions(),
-      api.getAdminSkills(), api.getAdminUsers(), api.getAmmoTypes(),
-      api.getCurrencies(), api.getShopPresets(),
-      api.getAdminBackgrounds(), api.getAdminSounds(),
+    const [i, p, prof, s, at, cur, usr, sp, bg, sd] = await Promise.all([
+      api.getAdminItems(),
+      api.getAdminPerks(),
+      api.getAdminProfessions(),
+      api.getAdminSkills(),
+      api.get('/ammo-types').then(r => r).catch(() => []),
+      api.get('/currencies').then(r => r).catch(() => []),
+      api.get('/admin/users').then(r => r).catch(() => []),
+      api.get('/shop/presets').then(r => r).catch(() => []),
+      api.get('/admin/backgrounds').then(r => r).catch(() => []),
+      api.get('/admin/sounds').then(r => r).catch(() => []),
     ]);
     setItems(i); setPerks(p); setProfessions(prof); setSkills(s);
-    setUsers(u); setAmmoTypes(a); setCurrencies(c); setShopPresets(ps);
-    setBackgrounds(bg); setSounds(sd);
+    setAmmoTypes(at); setCurrencies(cur); setUsers(usr); setShopPresets(sp);
+    setGlobalBackgrounds(bg); setGlobalSounds(sd);
     setLoading(false);
   };
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { load(); }, []);
 
   const handleEdit = (item) => { setEditing(item.id); setEditValues({ ...item }); };
+
   const handleSave = async (type) => {
-    const apiMap = {
-      items: api.updateAdminItem, perks: api.updateAdminPerk,
-      professions: api.updateAdminProfession, skills: api.updateAdminSkill,
-      users: api.updateAdminUser, ammo: api.updateAmmoType,
+    const endpoints = {
+      items: api.updateAdminItem,
+      perks: api.updateAdminPerk,
+      professions: api.updateAdminProfession,
+      skills: api.updateAdminSkill,
     };
-    if (apiMap[type]) await apiMap[type](editing, editValues);
-    setEditing(null); loadAll();
+    if (endpoints[type]) await endpoints[type](editing, editValues);
+    setEditing(null);
+    load();
   };
+
   const handleDelete = async (type, id) => {
     if (!confirm('Удалить?')) return;
-    const delMap = {
-      items: api.deleteAdminItem, perks: api.deleteAdminPerk,
-      professions: api.deleteAdminProfession, skills: api.deleteAdminSkill,
-      users: api.deleteAdminUser, ammo: api.deleteAmmoType,
-      currency: api.deleteCurrency, preset: api.deleteShopPreset,
-      background: api.deleteAdminBackground, sound: api.deleteAdminSound,
+    const endpoints = {
+      items: api.deleteAdminItem,
+      perks: () => api.fetch('/admin/perks/' + id, { method: 'DELETE' }),
+      professions: () => api.fetch('/admin/professions/' + id, { method: 'DELETE' }),
+      skills: () => api.fetch('/admin/skills/' + id, { method: 'DELETE' }),
     };
-    if (delMap[type]) await delMap[type](id);
-    loadAll();
+    if (endpoints[type]) await endpoints[type](id);
+    load();
   };
-  const handleCreate = async () => {
-    const createMap = {
-      items: api.createAdminItem, perks: api.createAdminPerk,
-      professions: api.createAdminProfession, skills: api.createAdminSkill,
-      ammo: api.createAmmoType, currency: api.createCurrency,
-      preset: api.createShopPreset,
-    };
-    if (createMap[formType]) await createMap[formType](editValues);
-    setShowForm(false); setEditValues({}); loadAll();
+
+  const handleCreateItem = async () => {
+    await api.post('/admin/items', newItem);
+    setNewItem({ name: '', slot: 'item', weight: 0, condition_percent: 100, description: '', trade_price: 0 });
+    setShowForm(false);
+    load();
   };
-  const openCreateForm = (type, defaults = {}) => {
-    setFormType(type); setEditValues(defaults); setShowForm(true);
-  };
+
   const toggleSelect = (id) => {
-    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
-  const selectAll = (list) => setSelected(list.map(x => x.id));
-  const batchDelete = async () => {
-    if (!selected.length || !confirm(`Удалить ${selected.length} предметов?`)) return;
-    await api.batchDeleteItems(selected);
-    setSelected([]); loadAll();
+
+  const handleBatchDelete = async () => {
+    if (!selectedIds.length) return;
+    if (!confirm(`Удалить ${selectedIds.length} предметов?`)) return;
+    await api.post('/admin/items/batch-delete', { ids: selectedIds });
+    setSelectedIds([]);
+    load();
   };
-  const batchUpdatePrice = async () => {
-    if (!selected.length || !batchPrice) return;
-    await api.batchUpdatePrice(selected, parseInt(batchPrice));
-    setSelected([]); setBatchPrice(''); loadAll();
+
+  const handleBatchPrice = async () => {
+    if (!selectedIds.length) return;
+    await api.put('/admin/items/batch-price', { ids: selectedIds, trade_price: batchPrice });
+    setSelectedIds([]);
+    load();
   };
 
   if (loading) return <p className="text-wasteland-400 text-center py-4">Загрузка...</p>;
@@ -95,180 +103,298 @@ export default function AdminPanel() {
     { key: 'perks', label: 'Перки' },
     { key: 'professions', label: 'Профессии' },
     { key: 'skills', label: 'Навыки' },
-    { key: 'users', label: 'Пользователи' },
     { key: 'ammo', label: 'Патроны' },
     { key: 'currencies', label: 'Валюты' },
     { key: 'shop', label: 'Магазин' },
+    { key: 'users', label: 'Пользователи' },
     { key: 'backgrounds', label: 'Фоны' },
     { key: 'sounds', label: 'Звуки' },
   ];
 
-  const slotGroups = ['weapon', 'armor', 'exo', 'mod', 'ammo', 'consumable', 'item', 'currency'];
-  const slotLabels = { weapon: 'Оружие', armor: 'Броня', exo: 'Экзо', mod: 'Моды', ammo: 'Патроны', consumable: 'Расходники', item: 'Предметы', currency: 'Валюта' };
-
-  const data = tab === 'items' ? items : tab === 'perks' ? perks : tab === 'professions' ? professions : tab === 'skills' ? skills : tab === 'users' ? users : tab === 'ammo' ? ammoTypes : tab === 'currencies' ? currencies : tab === 'shop' ? shopPresets : tab === 'backgrounds' ? backgrounds : sounds;
-
-  const isItemsTab = tab === 'items';
-
   return (
     <div className="space-y-3">
-      <h2 className="text-xl font-stylized text-accent-orange mb-4">Админ-панель (БД)</h2>
+      <h2 className="text-xl font-stylized text-accent-orange mb-4">Админ-панель</h2>
 
-      {/* Табы */}
       <div className="flex gap-1 overflow-x-auto flex-wrap">
         {tabs.map(t => (
-          <button key={t.key} onClick={() => { setTab(t.key); setSelected([]); }}
-            className={`text-xs px-3 py-1.5 rounded whitespace-nowrap ${tab === t.key ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
+          <button key={t.key} onClick={() => setTab(t.key)} className={`text-xs px-3 py-1.5 rounded ${tab === t.key ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* Кнопки действий */}
-      <div className="flex gap-2 flex-wrap">
-        {['items','perks','professions','skills','ammo'].includes(tab) && (
-          <button onClick={() => openCreateForm(tab, tab==='items'?{name:'',slot:'item',weight:0,condition_percent:100,description:'',trade_price:0,is_global:true}:tab==='perks'?{name:'',type:'neutral',cost:0,description:'',effect_text:'',effect_modifiers:[],tags:[],is_global:true}:tab==='professions'?{name:'',description:'',starter_skills:[],is_global:true}:tab==='skills'?{name:'',characteristic:'',tags:[],is_global:true}:{name:''})}
-            className="bg-accent-orange text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded">
-            + Создать
-          </button>
-        )}
-        {tab === 'currencies' && (
-          <button onClick={() => openCreateForm('currency', { name: '', item_id: '', icon: '💎' })}
-            className="bg-accent-orange text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded">+ Валюта</button>
-        )}
-        {tab === 'shop' && (
-          <button onClick={() => openCreateForm('preset', { name: '', is_active: false, price_multiplier: 1.0, items: [] })}
-            className="bg-accent-orange text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded">+ Пресет</button>
-        )}
-        {isItemsTab && selected.length > 0 && (
-          <>
-            <button onClick={batchDelete} className="bg-accent-red text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded">Удалить ({selected.length})</button>
-            <input type="number" placeholder="Цена" value={batchPrice} onChange={e => setBatchPrice(e.target.value)}
-              className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs w-20" />
-            <button onClick={batchUpdatePrice} className="bg-accent-green text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded">Цена →</button>
-            <button onClick={() => selectAll(items)} className="text-wasteland-400 text-xs hover:text-wasteland-200">Все</button>
-          </>
-        )}
-      </div>
+      {/* Предметы */}
+      {tab === 'items' && (
+        <div>
+          <div className="flex gap-2 mb-3 flex-wrap">
+            <button onClick={() => setShowForm(!showForm)} className="text-xs bg-accent-orange text-wasteland-900 px-3 py-1.5 rounded">
+              {showForm ? 'Отмена' : '+ Предмет'}
+            </button>
+            <button onClick={handleBatchDelete} disabled={!selectedIds.length} className="text-xs bg-accent-red text-wasteland-900 px-3 py-1.5 rounded disabled:opacity-50">
+              Удалить выбранные ({selectedIds.length})
+            </button>
+            <input type="number" value={batchPrice} onChange={e => setBatchPrice(parseInt(e.target.value)||0)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs w-20" placeholder="Цена" />
+            <button onClick={handleBatchPrice} disabled={!selectedIds.length} className="text-xs bg-accent-green text-wasteland-900 px-3 py-1.5 rounded disabled:opacity-50">
+              Установить цену
+            </button>
+          </div>
 
-      {/* Форма создания/редактирования */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-wasteland-800 border border-wasteland-600 rounded-lg p-4 max-w-lg w-full max-h-[80vh] overflow-y-auto">
-            <h3 className="text-accent-yellow font-bold mb-3">
-              {formType === 'items' ? 'Предмет' : formType === 'perks' ? 'Перк' : formType === 'professions' ? 'Профессия' : formType === 'skills' ? 'Навык' : formType === 'ammo' ? 'Тип патронов' : formType === 'currency' ? 'Валюта' : 'Пресет магазина'}
-            </h3>
-            <div className="space-y-2">
-              {Object.keys(editValues).filter(k => k !== 'id' && k !== 'created_at' && k !== 'updated_at').map(key => (
-                <div key={key} className="flex gap-2 items-center">
-                  <span className="text-wasteland-400 w-32 text-right flex-shrink-0 text-xs">{key}:</span>
-                  {key === 'slot' ? (
-                    <select value={editValues[key]||'item'} onChange={e => setEditValues({...editValues, [key]: e.target.value})}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-                      {slotGroups.map(s => <option key={s} value={s}>{slotLabels[s]}</option>)}
-                    </select>
-                  ) : key === 'mod_target' ? (
-                    <select value={editValues[key]||''} onChange={e => setEditValues({...editValues, [key]: e.target.value})}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-                      <option value="">—</option>
-                      <option value="weapon">Оружие</option><option value="armor">Броня</option>
-                      <option value="exo">Экзоскелет</option><option value="any">Любой</option>
-                    </select>
-                  ) : key === 'weapon_mod_subtype' ? (
-                    <select value={editValues[key]||''} onChange={e => setEditValues({...editValues, [key]: e.target.value})}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-                      <option value="">—</option>
-                      <option value="melee">Ближнее</option><option value="ranged">Дальнобойное</option>
-                      <option value="thrown">Метательное</option><option value="any">Любое</option>
-                    </select>
-                  ) : key === 'weapon_type' ? (
-                    <select value={editValues[key]||''} onChange={e => setEditValues({...editValues, [key]: e.target.value})}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-                      <option value="">—</option>
-                      <option value="melee">Ближнее</option><option value="ranged">Дальнобойное</option>
-                      <option value="thrown">Метательное</option>
-                    </select>
-                  ) : key === 'ammo_type_id' ? (
-                    <select value={editValues[key]||''} onChange={e => setEditValues({...editValues, [key]: e.target.value})}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-                      <option value="">—</option>
-                      {ammoTypes.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                  ) : key === 'type' ? (
-                    <select value={editValues[key]||'neutral'} onChange={e => setEditValues({...editValues, [key]: e.target.value})}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-                      <option value="positive">Позитивный</option><option value="negative">Негативный</option><option value="neutral">Нейтральный</option>
-                    </select>
-                  ) : key === 'role' ? (
-                    <select value={editValues[key]||'player'} onChange={e => setEditValues({...editValues, [key]: e.target.value})}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-                      <option value="player">Игрок</option><option value="admin">Админ</option>
-                    </select>
-                  ) : typeof editValues[key] === 'boolean' ? (
-                    <input type="checkbox" checked={!!editValues[key]} onChange={e => setEditValues({...editValues, [key]: e.target.checked})} />
-                  ) : typeof editValues[key] === 'object' ? (
-                    <input value={JSON.stringify(editValues[key])} onChange={e => { try { setEditValues({...editValues, [key]: JSON.parse(e.target.value)}); } catch {} }}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs font-mono" />
-                  ) : (
-                    <input value={editValues[key]||''} onChange={e => setEditValues({...editValues, [key]: e.target.value})}
-                      className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs" />
+          {showForm && (
+            <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
+              <input placeholder="Название" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              <select value={newItem.slot} onChange={e => setNewItem({...newItem, slot: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                <option value="weapon">Оружие</option>
+                <option value="armor">Броня</option>
+                <option value="exo">Экзоскелет</option>
+                <option value="mod">Модификация</option>
+                <option value="ammo">Патроны</option>
+                <option value="consumable">Расходник</option>
+                <option value="item">Предмет</option>
+                <option value="currency">Валюта</option>
+              </select>
+              {newItem.slot === 'weapon' && (
+                <>
+                  <select value={newItem.weapon_type || ''} onChange={e => setNewItem({...newItem, weapon_type: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                    <option value="">Тип оружия</option>
+                    <option value="melee">Ближний бой</option>
+                    <option value="ranged">Дальний бой</option>
+                    <option value="thrown">Метательное</option>
+                  </select>
+                  {newItem.weapon_type === 'ranged' && (
+                    <>
+                      <select value={newItem.ammo_type_id || ''} onChange={e => setNewItem({...newItem, ammo_type_id: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                        <option value="">Тип патронов по умолчанию</option>
+                        {ammoTypes.map(at => <option key={at.id} value={at.id}>{at.name}</option>)}
+                      </select>
+                      <input type="number" placeholder="Макс. патронов" value={newItem.max_ammo || ''} onChange={e => setNewItem({...newItem, max_ammo: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+                    </>
                   )}
-                </div>
-              ))}
-              {formType === 'shop' && (
-                <div className="mt-2">
-                  <p className="text-wasteland-400 text-xs mb-1">Предметы (JSON: [{"item_id":"...","price_override":50}])</p>
-                  <textarea value={JSON.stringify(editValues.items||[],null,2)} onChange={e => { try { setEditValues({...editValues, items: JSON.parse(e.target.value)}); } catch {} }}
-                    className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs font-mono" rows={5} />
-                </div>
+                </>
               )}
+              {newItem.slot === 'mod' && (
+                <>
+                  <select value={newItem.mod_target || ''} onChange={e => setNewItem({...newItem, mod_target: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                    <option value="">На что устанавливается</option>
+                    <option value="weapon">Оружие</option>
+                    <option value="armor">Броня</option>
+                    <option value="exo">Экзоскелет</option>
+                    <option value="any">Любой предмет</option>
+                  </select>
+                  {newItem.mod_target === 'weapon' && (
+                    <select value={newItem.weapon_mod_subtype || ''} onChange={e => setNewItem({...newItem, weapon_mod_subtype: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                      <option value="">Подтип оружия</option>
+                      <option value="melee">Ближний бой</option>
+                      <option value="ranged">Дальний бой</option>
+                      <option value="thrown">Метательное</option>
+                      <option value="any">Любое</option>
+                    </select>
+                  )}
+                </>
+              )}
+              {newItem.slot === 'ammo' && (
+                <select value={newItem.ammo_type_id || ''} onChange={e => setNewItem({...newItem, ammo_type_id: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                  <option value="">Тип патронов</option>
+                  {ammoTypes.map(at => <option key={at.id} value={at.id}>{at.name}</option>)}
+                </select>
+              )}
+              <div className="flex gap-2">
+                <input type="number" placeholder="Вес" value={newItem.weight} onChange={e => setNewItem({...newItem, weight: parseFloat(e.target.value)||0})} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+                <input type="number" placeholder="Цена" value={newItem.trade_price} onChange={e => setNewItem({...newItem, trade_price: parseInt(e.target.value)||0})} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              </div>
+              <textarea placeholder="Описание" value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" rows={2} />
+              <button onClick={handleCreateItem} disabled={!newItem.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">Создать</button>
             </div>
-            <div className="flex gap-2 mt-3">
-              <button onClick={handleCreate} className="bg-accent-orange text-wasteland-900 font-bold px-4 py-2 rounded text-sm">Сохранить</button>
-              <button onClick={() => { setShowForm(false); setEditValues({}); }} className="bg-wasteland-600 text-wasteland-300 px-4 py-2 rounded text-sm">Отмена</button>
-            </div>
+          )}
+
+          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+            {items.map(item => (
+              <div key={item.id} className={`bg-wasteland-800 p-2 rounded border text-xs flex gap-2 ${selectedIds.includes(item.id) ? 'border-accent-orange' : 'border-wasteland-600'}`}>
+                <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} />
+                {editing === item.id ? (
+                  <div className="flex-1 space-y-1">
+                    <input value={editValues.name || ''} onChange={e => setEditValues({...editValues, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100" />
+                    <div className="flex gap-2">
+                      <button onClick={() => handleSave('items')} className="bg-accent-green text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
+                      <button onClick={() => setEditing(null)} className="bg-wasteland-600 text-wasteland-300 px-2 py-1 rounded text-xs">Отмена</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex justify-between items-center">
+                    <span className="text-wasteland-200">{item.name} <span className="text-wasteland-500">({item.slot})</span></span>
+                    <div className="flex gap-1">
+                      <button onClick={() => handleEdit(item)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
+                      <button onClick={() => handleDelete('items', item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Список */}
-      <div className="space-y-1 max-h-[55vh] overflow-y-auto">
-        {isItemsTab && slotGroups.map(slot => {
-          const group = items.filter(i => i.slot === slot);
-          if (!group.length) return null;
-          return (
-            <div key={slot}>
-              <h3 className="text-wasteland-500 text-xs uppercase sticky top-0 bg-wasteland-900 py-1">{slotLabels[slot]} ({group.length})</h3>
-              {group.map(item => (
-                <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggleSelect(item.id)} />
-                    <span className="text-wasteland-200 font-bold">{item.name}</span>
-                    <span className="text-wasteland-500">{item.weight}кг</span>
-                    <span className="text-wasteland-500">💰{item.trade_price}</span>
-                    {item.weapon_type && <span className="text-wasteland-400">{item.weapon_type}</span>}
-                    {item.ammo_type?.name && <span className="text-accent-yellow text-xs">{item.ammo_type.name}</span>}
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => { handleEdit(item); setFormType('items'); }} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
-                    <button onClick={() => handleDelete('items', item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+      {/* Перки */}
+      {tab === 'perks' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {perks.map(item => (
+            <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs">
+              {editing === item.id ? (
+                <div className="space-y-1">
+                  <input value={editValues.name || ''} onChange={e => setEditValues({...editValues, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100" />
+                  <div className="flex gap-2">
+                    <button onClick={() => handleSave('perks')} className="bg-accent-green text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
+                    <button onClick={() => setEditing(null)} className="bg-wasteland-600 text-wasteland-300 px-2 py-1 rounded text-xs">Отмена</button>
                   </div>
                 </div>
-              ))}
+              ) : (
+                <div className="flex justify-between items-center">
+                  <span className="text-wasteland-200 font-bold">{item.name}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleEdit(item)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
+                    <button onClick={() => handleDelete('perks', item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+                  </div>
+                </div>
+              )}
             </div>
-          );
-        })}
-        {!isItemsTab && data.map(item => (
-          <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
-            <span className="text-wasteland-200 font-bold">{item.name || item.username || item.title}</span>
-            <div className="flex gap-1 items-center">
-              {tab === 'users' && <span className={`text-xs ${item.role==='admin'?'text-accent-orange':'text-wasteland-400'}`}>{item.role}</span>}
-              <button onClick={() => handleEdit(item)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
-              <button onClick={() => handleDelete(tab, item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+          ))}
+        </div>
+      )}
+
+      {/* Профессии */}
+      {tab === 'professions' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {professions.map(item => (
+            <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs">
+              {editing === item.id ? (
+                <div className="space-y-1">
+                  <input value={editValues.name || ''} onChange={e => setEditValues({...editValues, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100" />
+                  <div className="flex gap-2">
+                    <button onClick={() => handleSave('professions')} className="bg-accent-green text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
+                    <button onClick={() => setEditing(null)} className="bg-wasteland-600 text-wasteland-300 px-2 py-1 rounded text-xs">Отмена</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center">
+                  <span className="text-wasteland-200 font-bold">{item.name}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleEdit(item)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
+                    <button onClick={() => handleDelete('professions', item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Навыки */}
+      {tab === 'skills' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {skills.map(item => (
+            <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs">
+              {editing === item.id ? (
+                <div className="space-y-1">
+                  <input value={editValues.name || ''} onChange={e => setEditValues({...editValues, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100" />
+                  <div className="flex gap-2">
+                    <button onClick={() => handleSave('skills')} className="bg-accent-green text-wasteland-900 px-2 py-1 rounded text-xs font-bold">OK</button>
+                    <button onClick={() => setEditing(null)} className="bg-wasteland-600 text-wasteland-300 px-2 py-1 rounded text-xs">Отмена</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center">
+                  <span className="text-wasteland-200 font-bold">{item.name}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleEdit(item)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
+                    <button onClick={() => handleDelete('skills', item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Типы патронов */}
+      {tab === 'ammo' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {ammoTypes.map(item => (
+            <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+              <span className="text-wasteland-200">{item.name}</span>
+              <button onClick={() => { api.fetch('/ammo-types/' + item.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400">🗑️</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Валюты */}
+      {tab === 'currencies' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {currencies.map(item => (
+            <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+              <span className="text-wasteland-200">{item.icon} {item.name}</span>
+              <button onClick={() => { api.fetch('/currencies/' + item.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400">🗑️</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Магазин */}
+      {tab === 'shop' && (
+        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+          {shopPresets.map(p => (
+            <div key={p.id} className="bg-wasteland-800 p-3 rounded border border-wasteland-600 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-wasteland-200 font-bold">{p.name}</span>
+                <span className={`text-xs ${p.is_active ? 'text-accent-green' : 'text-wasteland-500'}`}>{p.is_active ? 'Активен' : 'Скрыт'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Пользователи */}
+      {tab === 'users' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {users.map(u => (
+            <div key={u.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+              <div>
+                <span className="text-wasteland-200">{u.username}</span>
+                <span className={`ml-2 ${u.role === 'admin' ? 'text-accent-orange' : 'text-wasteland-500'}`}>{u.role}</span>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => { api.put('/admin/users/' + u.id, { role: u.role === 'admin' ? 'player' : 'admin' }).then(load); }} className="text-wasteland-400 hover:text-wasteland-200 text-xs">
+                  {u.role === 'admin' ? '→ player' : '→ admin'}
+                </button>
+                <button onClick={() => { if (confirm('Удалить пользователя?')) api.fetch('/admin/users/' + u.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400 text-xs">🗑️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Фоны */}
+      {tab === 'backgrounds' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {globalBackgrounds.map(bg => (
+            <div key={bg.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+              <span className="text-wasteland-200">{bg.name}</span>
+              <button onClick={() => { api.fetch('/admin/backgrounds/' + bg.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400">🗑️</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Звуки */}
+      {tab === 'sounds' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {globalSounds.map(s => (
+            <div key={s.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+              <span className="text-wasteland-200">{s.name}</span>
+              <button onClick={() => { api.fetch('/admin/sounds/' + s.id, { method: 'DELETE' }).then(load); }} className="text-accent-red hover:text-red-400">🗑️</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
