@@ -1,4 +1,3 @@
-// src/hooks/usePrompt.js
 import { useState } from 'react';
 import Modal from '../components/Modal';
 
@@ -19,8 +18,12 @@ export default function usePrompt() {
     });
   });
 
+  const handleCancel = () => {
+    setState({ isOpen: false, title: '', defaultValue: '', onConfirm: null });
+  };
+
   const PromptModal = (
-    <Modal isOpen={state.isOpen} onClose={() => { setState({ isOpen: false, title: '', defaultValue: '', onConfirm: null }); }} title={state.title}>
+    <Modal isOpen={state.isOpen} onClose={handleCancel} title={state.title}>
       <input
         className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm mb-4"
         value={inputValue}
@@ -30,7 +33,7 @@ export default function usePrompt() {
       />
       <div className="flex gap-2">
         <button onClick={state.onConfirm} className="flex-1 bg-accent-orange text-wasteland-900 font-bold py-2 rounded text-sm">OK</button>
-        <button onClick={() => { setState({ isOpen: false, title: '', defaultValue: '', onConfirm: null }); }} className="flex-1 bg-wasteland-600 text-wasteland-300 py-2 rounded text-sm">Отмена</button>
+        <button onClick={handleCancel} className="flex-1 bg-wasteland-600 text-wasteland-300 py-2 rounded text-sm">Отмена</button>
       </div>
     </Modal>
   );
