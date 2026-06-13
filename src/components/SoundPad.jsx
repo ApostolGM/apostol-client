@@ -11,11 +11,16 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
   const [volume, setVolume] = useState(0.8);
   const [muted, setMuted] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadedUrl, setUploadedUrl] = useState('');
   const audioRef = useRef(null);
 
   const load = async () => {
-    const data = await api.getSounds(campaignId);
-    setSounds(data);
+    try {
+      const data = await api.getSounds(campaignId);
+      setSounds(data);
+    } catch (e) {
+      console.error('Ошибка загрузки звуков:', e);
+    }
     setLoading(false);
   };
 
@@ -24,46 +29,50 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
   useEffect(() => {
     if (!socketRef?.current) return;
     const socket = socketRef.current;
-    socket.on('sound_play', (data) => {
+    const onPlay = (data) => {
       if (data.campaignId === campaignId) {
         setPlaying(data.soundId);
-        if (audioRef.current && !muted) {
+        if (audioRef.current) {
           audioRef.current.src = data.url;
-          audioRef.current.volume = data.volume * volume;
-          audioRef.current.play().catch(() => {});
+          audioRef.current.volume = muted ? 0 : data.volume * volume;
+          audioRef.current.play().catch(e => console.error('Ошибка воспроизведения:', e));
         }
       }
-    });
-    socket.on('sound_stop', (data) => {
+    };
+    const onStop = (data) => {
       if (data.campaignId === campaignId) {
         setPlaying(null);
         if (audioRef.current) {
           audioRef.current.pause();
-          audioRef.current.src = '';
+          audioRef.current.currentTime = 0;
         }
       }
-    });
+    };
+    socket.on('sound_play', onPlay);
+    socket.on('sound_stop', onStop);
     return () => {
-      socket.off('sound_play');
-      socket.off('sound_stop');
+      socket.off('sound_play', onPlay);
+      socket.off('sound_stop', onStop);
     };
   }, [campaignId, socketRef, muted, volume]);
+
+  // Обновляем громкость у текущего аудио при изменении
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = muted ? 0 : volume;
+    }
+  }, [volume, muted]);
 
   const handlePlay = (sound) => {
     if (!isMaster) return;
     setPlaying(sound.id);
     if (socketRef?.current) {
-      socketRef.current.emit('sound_play', {
-        campaignId,
-        soundId: sound.id,
-        url: sound.file_url,
-        volume: volume,
-      });
+      socketRef.current.emit('sound_play', { campaignId, soundId: sound.id, url: sound.file_url, volume });
     }
     if (audioRef.current) {
       audioRef.current.src = sound.file_url;
-      audioRef.current.volume = volume;
-      audioRef.current.play().catch(() => {});
+      audioRef.current.volume = muted ? 0 : volume;
+      audioRef.current.play().catch(e => console.error('Ошибка воспроизведения:', e));
     }
   };
 
@@ -75,16 +84,21 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
     }
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = '';
+      audioRef.current.currentTime = 0;
     }
   };
 
-  const handleAddByUrl = async () => {
+  const handleAddSound = async () => {
     if (!form.name || !form.file_url) return;
-    await api.createSound({ ...form, campaign_id: campaignId });
-    setForm({ name: '', file_url: '', category: 'ambient' });
-    setShowForm(false);
-    load();
+    try {
+      await api.createSound({ ...form, campaign_id: campaignId });
+      setForm({ name: '', file_url: '', category: 'ambient' });
+      setUploadedUrl('');
+      setShowForm(false);
+      load();
+    } catch (e) {
+      alert('Ошибка добавления: ' + e.message);
+    }
   };
 
   const handleFileUpload = async (e) => {
@@ -98,22 +112,31 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const result = await api.uploadSound(reader.result, form.name || file.name, campaignId, false);
-        setForm({ name: '', file_url: '', category: 'ambient' });
-        setShowForm(false);
-        load();
+        const result = await api.uploadSound(reader.result, file.name, campaignId, false);
+        setForm(prev => ({ ...prev, name: prev.name || result.name, file_url: result.url }));
+        setUploadedUrl(result.url);
       } catch (err) {
-        alert('Ошибка загрузки: ' + (err.message || 'Неизвестная ошибка'));
+        alert('Ошибка загрузки файла: ' + (err.message || 'Неизвестная ошибка'));
       } finally {
         setUploading(false);
       }
+    };
+    reader.onerror = () => {
+      alert('Ошибка чтения файла');
+      setUploading(false);
     };
     reader.readAsDataURL(file);
   };
 
   const handleDelete = async (id) => {
-    await api.deleteSound(id);
-    load();
+    if (!confirm('Удалить звук?')) return;
+    try {
+      await api.deleteSound(id);
+      if (playing === id) handleStop();
+      load();
+    } catch (e) {
+      alert('Ошибка удаления: ' + e.message);
+    }
   };
 
   const categories = [...new Set(sounds.map(s => s.category || 'общее'))];
@@ -122,21 +145,21 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <h2 className="text-xl font-stylized text-accent-orange">Соундпад</h2>
         <div className="flex items-center gap-2">
           <span className="text-wasteland-500 text-xs">Громкость:</span>
-          <input type="range" min="0" max="100" value={Math.round(volume * 100)} onChange={e => setVolume(parseInt(e.target.value) / 100)} className="w-20" />
+          <input type="range" min="0" max="100" value={Math.round(volume * 100)} onChange={e => setVolume(parseInt(e.target.value) / 100)} className="w-16 md:w-20" />
           <button onClick={() => setMuted(!muted)} className={`text-xs px-2 py-1 rounded ${muted ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
             {muted ? '🔇' : '🔊'}
           </button>
           {isMaster && (
             <>
-              <button onClick={() => setShowForm(!showForm)} className="bg-accent-orange text-wasteland-900 text-sm font-bold px-4 py-2 rounded hover:bg-orange-500 transition">
+              <button onClick={() => { setShowForm(!showForm); setUploadedUrl(''); }} className="bg-accent-orange text-wasteland-900 text-sm font-bold px-3 py-1.5 rounded hover:bg-orange-500 transition">
                 + Звук
               </button>
               {playing && (
-                <button onClick={handleStop} className="bg-accent-red text-wasteland-900 text-sm font-bold px-4 py-2 rounded hover:bg-red-500 transition">
+                <button onClick={handleStop} className="bg-accent-red text-wasteland-900 text-sm font-bold px-3 py-1.5 rounded hover:bg-red-500 transition">
                   ⏹ Стоп
                 </button>
               )}
@@ -147,17 +170,51 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
 
       {showForm && isMaster && (
         <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 space-y-3">
-          <input placeholder="Название" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm" />
+          <h3 className="text-wasteland-300 text-sm font-bold">Добавить звук</h3>
 
-          <div className="flex gap-2 items-center flex-wrap">
-            <label className="bg-accent-orange hover:bg-orange-500 text-wasteland-900 text-xs font-bold px-4 py-2 rounded cursor-pointer text-center">
-              {uploading ? 'Загрузка...' : '📁 Выбрать файл'}
+          <input
+            placeholder="Название звука"
+            value={form.name}
+            onChange={e => setForm({ ...form, name: e.target.value })}
+            className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm"
+          />
+
+          <div className="space-y-2">
+            <label className={`inline-block bg-wasteland-700 hover:bg-wasteland-600 text-wasteland-300 text-xs font-bold px-4 py-2 rounded cursor-pointer text-center ${uploading ? 'opacity-50' : ''}`}>
+              {uploading ? '⏳ Загрузка...' : '📁 Выбрать аудиофайл'}
               <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload} disabled={uploading} />
             </label>
-            <span className="text-wasteland-500 text-xs">или URL:</span>
-          </div>
 
-          <input placeholder="URL аудиофайла (если не загружаете файл)" value={form.file_url} onChange={e => setForm({ ...form, file_url: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm" />
+            {uploadedUrl && (
+              <div className="bg-accent-green/10 border border-accent-green/30 p-2 rounded text-xs text-accent-green">
+                ✅ Файл загружен! Ссылка вставлена в поле URL.
+              </div>
+            )}
+
+            <div>
+              <label className="text-wasteland-400 text-xs">URL аудиофайла</label>
+              <input
+                placeholder="https://... или загрузите файл выше"
+                value={form.file_url}
+                onChange={e => setForm({ ...form, file_url: e.target.value })}
+                className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm"
+              />
+              {form.file_url && (
+                <button
+                  onClick={() => {
+                    if (audioRef.current) {
+                      audioRef.current.src = form.file_url;
+                      audioRef.current.volume = muted ? 0 : volume;
+                      audioRef.current.play().catch(e => alert('Не удалось воспроизвести: ' + e.message));
+                    }
+                  }}
+                  className="text-xs text-accent-yellow hover:underline mt-1"
+                >
+                  ▶ Предпрослушать
+                </button>
+              )}
+            </div>
+          </div>
 
           <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm">
             <option value="ambient">Эмбиент</option>
@@ -166,13 +223,30 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
             <option value="sfx">Эффекты</option>
             <option value="общее">Общее</option>
           </select>
-          <button onClick={handleAddByUrl} disabled={!form.file_url || uploading} className="bg-accent-orange text-wasteland-900 font-bold px-4 py-2 rounded text-sm disabled:opacity-50">
-            Добавить по URL
-          </button>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddSound}
+              disabled={!form.name || !form.file_url}
+              className="bg-accent-orange text-wasteland-900 font-bold px-4 py-2 rounded text-sm disabled:opacity-50 hover:bg-orange-500 transition"
+            >
+              ✅ Добавить в соундпад
+            </button>
+            <button
+              onClick={() => { setShowForm(false); setUploadedUrl(''); }}
+              className="bg-wasteland-600 text-wasteland-300 px-4 py-2 rounded text-sm hover:bg-wasteland-500 transition"
+            >
+              Отмена
+            </button>
+          </div>
         </div>
       )}
 
-      <audio ref={audioRef} loop />
+      <audio ref={audioRef} loop preload="auto" />
+
+      {categories.length === 0 && !loading && (
+        <p className="text-wasteland-500 text-center py-4">Нет звуков. Добавьте первый!</p>
+      )}
 
       {categories.map(cat => {
         const catSounds = sounds.filter(s => (s.category || 'общее') === cat);
@@ -187,7 +261,7 @@ export default function SoundPad({ campaignId, isMaster, socketRef }) {
                     {playing === s.id ? '🔊 ' : '🎵 '}{s.name}
                   </div>
                   {isMaster && (
-                    <button onClick={() => handleDelete(s.id)} className="text-accent-red text-xs mt-1 hover:underline">Удалить</button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }} className="text-accent-red text-xs mt-1 hover:underline">Удалить</button>
                   )}
                 </div>
               ))}
