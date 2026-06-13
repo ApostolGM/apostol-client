@@ -1,3 +1,4 @@
+// src/pages/Campaign.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
@@ -238,12 +239,14 @@ export default function Campaign({ user }) {
     ...(!isMaster ? [{ key: 'inventory', label: 'Инв' }] : []),
     { key: 'scene', label: 'Сцена' },
     { key: 'shop', label: 'Магазин' },
+    { key: 'sounds', label: 'Звук' },
     ...(isMaster ? [
       { key: 'npcs', label: 'NPC' },
       { key: 'notes', label: 'Заметки' },
       { key: 'handouts', label: 'Хендауты' },
-      { key: 'sounds', label: 'Звук' },
-    ] : [{ key: 'handouts', label: 'Раздача' }]),
+    ] : [
+      { key: 'handouts', label: 'Раздача' },
+    ]),
     ...(isAdmin ? [{ key: 'admin', label: 'БД' }] : []),
   ];
 
@@ -352,6 +355,11 @@ export default function Campaign({ user }) {
             <div className="flex-1 overflow-y-auto p-3 min-h-0"><ShopPanel character={character} onRefresh={refreshCharacter} /></div>
           )}
 
+          {/* Соундпад (для всех) */}
+          {activeTab === 'sounds' && (
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} /></div>
+          )}
+
           {/* NPC */}
           {activeTab === 'npcs' && isMaster && (
             <div className="flex-1 overflow-y-auto p-3 min-h-0"><NPCPanel campaignId={id} socketRef={socketRef} /></div>
@@ -365,11 +373,6 @@ export default function Campaign({ user }) {
           {/* Хендауты */}
           {activeTab === 'handouts' && (
             <div className="flex-1 overflow-y-auto p-3 min-h-0"><HandoutsPanel campaignId={id} isMaster={isMaster} /></div>
-          )}
-
-          {/* Соундпад */}
-          {activeTab === 'sounds' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} /></div>
           )}
 
           {/* Админка */}
