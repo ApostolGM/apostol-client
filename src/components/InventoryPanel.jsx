@@ -6,6 +6,7 @@ export default function InventoryPanel({ character, onRefresh, socketRef }) {
   const [inv, setInv] = useState([]);
   const [error, setError] = useState('');
   const [weightInfo, setWeightInfo] = useState(null);
+  const [expandedContainers, setExpandedContainers] = useState({});
 
   useEffect(() => { setInv(character?.inventory || []); }, [character]);
 
@@ -26,6 +27,10 @@ export default function InventoryPanel({ character, onRefresh, socketRef }) {
 
   const refresh = async () => { await onRefresh(); };
 
+  const toggleContainer = (slotId) => {
+    setExpandedContainers(prev => ({ ...prev, [slotId]: !prev[slotId] }));
+  };
+
   const getDurabilityColor = (d) => {
     if (!d && d !== 0) return 'text-wasteland-400';
     if (d >= 80) return 'text-accent-green';
@@ -36,12 +41,14 @@ export default function InventoryPanel({ character, onRefresh, socketRef }) {
 
   const getWeaponIcon = (t) => t === 'melee' ? '🔪' : t === 'ranged' ? '🔫' : t === 'thrown' ? '🎯' : '';
 
-  const equipped = inv.filter(s => s.equipped);
-  const backpack = inv.filter(s => !s.equipped && s.slot_type === 'рюкзак');
-  const belt = inv.filter(s => !s.equipped && s.slot_type === 'пояс');
-  const other = inv.filter(s => !s.equipped && !['рюкзак','пояс'].includes(s.slot_type));
+  // Группируем слоты
+  const containerSlots = inv.filter(s => s.item?.is_container);
+  const equipped = inv.filter(s => s.equipped && !s.item?.is_container);
+  const backpack = inv.filter(s => !s.equipped && s.slot_type === 'рюкзак' && !s.item?.is_container);
+  const belt = inv.filter(s => !s.equipped && s.slot_type === 'пояс' && !s.item?.is_container);
+  const other = inv.filter(s => !s.equipped && !['рюкзак', 'пояс'].includes(s.slot_type) && !s.item?.is_container && !s.parent_slot_id);
 
-  const handsEquipped = equipped.filter(s => ['правая_рука','левая_рука'].includes(s.slot_type));
+  const handsEquipped = equipped.filter(s => ['правая_рука', 'левая_рука'].includes(s.slot_type));
   const bodyEquipped = equipped.filter(s => s.slot_type === 'тело');
   const exoEquipped = equipped.filter(s => s.slot_type === 'экзоскелет');
 
@@ -84,6 +91,40 @@ export default function InventoryPanel({ character, onRefresh, socketRef }) {
       {error && <p className="text-accent-red text-sm bg-wasteland-800 p-3 rounded">{error}</p>}
       {inv.length === 0 && <p className="text-wasteland-500 text-sm text-center py-4">Инвентарь пуст</p>}
 
+      {/* Контейнеры */}
+      {containerSlots.length > 0 && (
+        <div>
+          <h3 className="text-wasteland-400 text-xs uppercase mb-1 px-1">📦 Контейнеры</h3>
+          {containerSlots.map(s => (
+            <div key={s.id}>
+              <ContainerRow
+                slot={s}
+                expanded={expandedContainers[s.id]}
+                onToggle={() => toggleContainer(s.id)}
+                refresh={refresh}
+                getDurabilityColor={getDurabilityColor}
+                getWeaponIcon={getWeaponIcon}
+              />
+              {expandedContainers[s.id] && (s.children || []).length > 0 && (
+                <div className="ml-4 border-l border-wasteland-600 pl-3 mb-1">
+                  {s.children.map(child => (
+                    <SlotRow
+                      key={child.id}
+                      slot={child}
+                      refresh={refresh}
+                      getDurabilityColor={getDurabilityColor}
+                      getWeaponIcon={getWeaponIcon}
+                      isChild
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Экипировка */}
       {(handsEquipped.length > 0 || bodyEquipped.length > 0 || exoEquipped.length > 0) && (
         <div>
           <h3 className="text-wasteland-400 text-xs uppercase mb-1 px-1">⚡ Экипировано</h3>
@@ -93,6 +134,7 @@ export default function InventoryPanel({ character, onRefresh, socketRef }) {
         </div>
       )}
 
+      {/* Пояс */}
       {belt.length > 0 && (
         <div>
           <h3 className="text-wasteland-400 text-xs uppercase mb-1 px-1">Пояс ({belt.length}/{beltSlotsMax})</h3>
@@ -100,6 +142,7 @@ export default function InventoryPanel({ character, onRefresh, socketRef }) {
         </div>
       )}
 
+      {/* Рюкзак */}
       <div>
         <h3 className="text-wasteland-400 text-xs uppercase mb-1 px-1">Рюкзак</h3>
         {backpack.length === 0 && other.length === 0 && <p className="text-wasteland-600 text-xs px-1">Пусто</p>}
@@ -110,7 +153,33 @@ export default function InventoryPanel({ character, onRefresh, socketRef }) {
   );
 }
 
-function SlotRow({ slot, refresh, getDurabilityColor, getWeaponIcon }) {
+function ContainerRow({ slot, expanded, onToggle, refresh, getDurabilityColor, getWeaponIcon }) {
+  const item = slot.item;
+  const condition = slot.condition_percent ?? item?.condition_percent ?? 100;
+  const childrenCount = (slot.children || []).length;
+  const totalWeight = slot.containerWeight || item?.weight || 0;
+
+  return (
+    <div className="bg-wasteland-800 p-2 rounded border border-accent-green/30 mb-1 cursor-pointer" onClick={onToggle}>
+      <div className="flex justify-between items-start">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <span className="text-accent-green text-xs">{expanded ? '📂' : '📦'}</span>
+            <span className="text-wasteland-100 text-sm font-bold truncate">{item?.name}</span>
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0 text-xs mt-0.5">
+            <span className="text-wasteland-400">Контейнер</span>
+            <span className={getDurabilityColor(condition)}>🔧 {condition}%</span>
+            <span className="text-wasteland-500">{totalWeight.toFixed(1)} кг</span>
+            <span className="text-accent-yellow">{childrenCount} / {item?.container_slots || 0}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SlotRow({ slot, refresh, getDurabilityColor, getWeaponIcon, isChild }) {
   const item = slot.item;
   const [busy, setBusy] = useState(false);
   const condition = slot.condition_percent ?? item?.condition_percent ?? 100;
@@ -124,15 +193,15 @@ function SlotRow({ slot, refresh, getDurabilityColor, getWeaponIcon }) {
   const canEquip = item?.slot === 'weapon' || item?.slot === 'armor' || item?.slot === 'exo';
   const isRanged = item?.slot === 'weapon' && item?.weapon_type === 'ranged';
   const isThrown = item?.slot === 'weapon' && item?.weapon_type === 'thrown';
-  const isConsumable = item?.slot === 'consumable';
-  const isAmmo = item?.slot === 'ammo';
+  const isConsumable = item?.slot === 'consumable' || item?.slot === 'ammo';
 
   return (
-    <div className={`bg-wasteland-800 p-2 rounded border mb-1 ${slot.equipped ? 'border-accent-orange' : 'border-wasteland-600'}`}>
+    <div className={`bg-wasteland-800 p-2 rounded border mb-1 ${slot.equipped ? 'border-accent-orange' : 'border-wasteland-600'} ${isChild ? 'border-l-accent-green' : ''}`}>
       <div className="flex justify-between items-start">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
             {slot.equipped && <span className="text-accent-orange text-xs">⚡</span>}
+            {isChild && <span className="text-accent-green text-xs">↳</span>}
             <span className="text-wasteland-100 text-sm font-bold truncate">
               {getWeaponIcon(item?.weapon_type)} {item?.name}
             </span>
@@ -159,23 +228,25 @@ function SlotRow({ slot, refresh, getDurabilityColor, getWeaponIcon }) {
           )}
         </div>
 
-        <div className="flex gap-1 ml-2 flex-shrink-0">
-          {!slot.equipped && canEquip && (
-            <button onClick={() => act(() => api.equipItem(slot.id))} disabled={busy} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300">⚡</button>
-          )}
-          {slot.equipped && (
-            <button onClick={() => act(() => api.unequipItem(slot.id))} disabled={busy} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300">📥</button>
-          )}
-          {slot.equipped && (isRanged || isThrown) && (
-            <button onClick={() => act(() => api.useItem(slot.id))} disabled={busy} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-1 rounded text-accent-red">Исп</button>
-          )}
-          {!slot.equipped && isConsumable && !isAmmo && (
-            <button onClick={() => act(() => api.useItem(slot.id))} disabled={busy} className="text-xs bg-accent-green/20 hover:bg-accent-green/40 px-2 py-1 rounded text-accent-green">Исп</button>
-          )}
-          {slot.equipped && isRanged && (item?.current_ammo || 0) < (item?.max_ammo || 0) && (
-            <button onClick={() => act(() => api.reloadWeapon(slot.id, item?.ammo_type_id))} disabled={busy} className="text-xs bg-accent-yellow/20 hover:bg-accent-yellow/40 px-2 py-1 rounded text-accent-yellow">🔄</button>
-          )}
-        </div>
+        {!isChild && (
+          <div className="flex gap-1 ml-2 flex-shrink-0">
+            {!slot.equipped && canEquip && (
+              <button onClick={() => act(() => api.equipItem(slot.id))} disabled={busy} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300">⚡</button>
+            )}
+            {slot.equipped && (
+              <button onClick={() => act(() => api.unequipItem(slot.id))} disabled={busy} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300">📥</button>
+            )}
+            {slot.equipped && (isRanged || isThrown) && (
+              <button onClick={() => act(() => api.useItem(slot.id))} disabled={busy} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-1 rounded text-accent-red">Исп</button>
+            )}
+            {!slot.equipped && isConsumable && (
+              <button onClick={() => act(() => api.useItem(slot.id))} disabled={busy} className="text-xs bg-accent-green/20 hover:bg-accent-green/40 px-2 py-1 rounded text-accent-green">Исп</button>
+            )}
+            {slot.equipped && isRanged && (item?.current_ammo || 0) < (item?.max_ammo || 0) && (
+              <button onClick={() => act(() => api.reloadWeapon(slot.id, item?.ammo_type_id))} disabled={busy} className="text-xs bg-accent-yellow/20 hover:bg-accent-yellow/40 px-2 py-1 rounded text-accent-yellow">🔄</button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
