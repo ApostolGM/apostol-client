@@ -44,7 +44,8 @@ export const api = {
   fetch: (path, options = {}) => request(path, options),
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
-
+getAdminCampaigns: () => request('/admin/campaigns'),
+deleteAdminCampaign: (id) => request(`/admin/campaigns/${id}`, { method: 'DELETE' }),
   // Auth
   register: (u, p) => request('/auth/register', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
   login: (u, p) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
