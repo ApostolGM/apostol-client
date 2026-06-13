@@ -237,7 +237,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
   // Снапшоты
   const takeSnapshot = () => {
-    const name = prompt('Название снапшота:');
+    const name = usePrompt('Название снапшота:');
     if (!name) return;
     const snapshot = {
       id: Date.now().toString(),
@@ -395,11 +395,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!isMaster || tool !== 'portal') return;
     e.preventDefault();
     const pos = getTokenPos(e);
-    const portalName = prompt('Имя/ID портала:', 'Портал');
+    const portalName = usePrompt('Имя/ID портала:', 'Портал');
     if (!portalName) return;
-    const targetScene = prompt('Тип сцены для перехода (local/global):', sceneType === 'local' ? 'global' : 'local');
+    const targetScene = usePrompt('Тип сцены для перехода (local/global):', sceneType === 'local' ? 'global' : 'local');
     if (!targetScene || !['local', 'global'].includes(targetScene)) return;
-    const linkName = prompt('Имя связанного портала (на целевой сцене):', portalName);
+    const linkName = usePrompt('Имя связанного портала (на целевой сцене):', portalName);
     if (!linkName) return;
     const newPortal = { id: `portal_${Date.now()}`, name: portalName, targetScene, linkName, x: pos.x, y: pos.y, visible: true };
     const newPortals = [...portalsRef.current, newPortal];
@@ -428,7 +428,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     if (!isMaster || tool !== 'note') return;
     e.preventDefault();
     const pos = getTokenPos(e);
-    const text = prompt('Текст заметки:');
+    const text = usePrompt('Текст заметки:');
     if (text) {
       const newToken = { id: `note_${Date.now()}`, type: 'note', label: '📝', color: '#ffcc00', x: pos.x, y: pos.y, note: text, hidden: false };
       syncTokens([...tokens, newToken]);
