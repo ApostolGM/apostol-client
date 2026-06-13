@@ -1,4 +1,3 @@
-// src/components/ItemListEditor.jsx
 export default function ItemListEditor({ items = [], allItems = [], onChange, showPrice = false }) {
   const addRow = () => {
     onChange([...items, { item_id: '', quantity: 1, price_override: 0 }]);
