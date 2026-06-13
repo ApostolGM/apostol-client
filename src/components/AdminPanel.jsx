@@ -2,6 +2,15 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 
+const SUBCATEGORIES = {
+  weapon: ['melee', 'ranged', 'thrown'],
+  armor: ['light', 'heavy'],
+  consumable: ['food', 'water', 'meds', 'other'],
+  item: ['tool', 'container', 'other'],
+  mod: ['weapon-mod', 'armor-mod', 'exo-mod', 'universal'],
+  // ammo, exo, currency — без подкатегорий
+};
+
 export default function AdminPanel() {
   const [tab, setTab] = useState('items');
   const [items, setItems] = useState([]);
@@ -14,16 +23,21 @@ export default function AdminPanel() {
   const [shopPresets, setShopPresets] = useState([]);
   const [globalBackgrounds, setGlobalBackgrounds] = useState([]);
   const [globalSounds, setGlobalSounds] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [showForm, setShowForm] = useState(false);
-  const [formType, setFormType] = useState(''); // 'item', 'perk', 'profession', 'skill', 'ammo', 'currency', 'preset'
+  const [formType, setFormType] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [batchPrice, setBatchPrice] = useState(0);
 
+  // Filter states
+  const [filterSlot, setFilterSlot] = useState('all');
+  const [filterSubcategory, setFilterSubcategory] = useState('all');
+
   // Form states
-  const [newItem, setNewItem] = useState({ name: '', slot: 'item', weight: 0, condition_percent: 100, description: '', trade_price: 0, is_global: true });
+  const [newItem, setNewItem] = useState({ name: '', slot: 'item', subcategory: '', weight: 0, condition_percent: 100, description: '', trade_price: 0, is_global: true, is_container: false, container_slots: 0, container_items: '[]' });
   const [newPerk, setNewPerk] = useState({ name: '', type: 'positive', cost: 0, description: '', effect_text: '', effect_modifiers: '[]', tags: '', is_global: true });
   const [newProfession, setNewProfession] = useState({ name: '', description: '', starter_skills: '[]', is_global: true });
   const [newSkill, setNewSkill] = useState({ name: '', characteristic: '', tags: '', is_global: true });
@@ -34,7 +48,7 @@ export default function AdminPanel() {
 
   const load = async () => {
     setLoading(true);
-    const [i, p, prof, s, at, cur, usr, sp, bg, sd] = await Promise.all([
+    const [i, p, prof, s, at, cur, usr, sp, bg, sd, camp] = await Promise.all([
       api.getAdminItems(),
       api.getAdminPerks(),
       api.getAdminProfessions(),
@@ -45,16 +59,17 @@ export default function AdminPanel() {
       api.getShopPresets(),
       api.getAdminBackgrounds(),
       api.getAdminSounds(),
+      api.getAdminCampaigns().catch(() => []),
     ]);
     setItems(i); setPerks(p); setProfessions(prof); setSkills(s);
     setAmmoTypes(at); setCurrencies(cur); setUsers(usr); setShopPresets(sp);
     setGlobalBackgrounds(bg); setGlobalSounds(sd);
+    setCampaigns(camp);
     setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
 
-  // Generic handlers
   const handleEdit = (item) => { setEditing(item.id); setEditValues({ ...item }); };
 
   const handleSave = async (type) => {
@@ -78,10 +93,15 @@ export default function AdminPanel() {
     load();
   };
 
-  // Create handlers
   const handleCreateItem = async () => {
-    await api.createAdminItem({ ...newItem, is_global: true });
-    setNewItem({ name: '', slot: 'item', weight: 0, condition_percent: 100, description: '', trade_price: 0, is_global: true });
+    let containerItems = [];
+    try { containerItems = JSON.parse(newItem.container_items); } catch {}
+    await api.createAdminItem({
+      ...newItem,
+      container_items: containerItems,
+      subcategory: newItem.slot === 'ammo' ? null : newItem.subcategory || null,
+    });
+    setNewItem({ name: '', slot: 'item', subcategory: '', weight: 0, condition_percent: 100, description: '', trade_price: 0, is_global: true, is_container: false, container_slots: 0, container_items: '[]' });
     setShowForm(false);
     load();
   };
@@ -144,7 +164,6 @@ export default function AdminPanel() {
     load();
   };
 
-  // Batch handlers
   const toggleSelect = (id) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -166,6 +185,14 @@ export default function AdminPanel() {
 
   const openForm = (type) => { setFormType(type); setShowForm(true); };
 
+  const getAvailableSubcategories = (slot) => SUBCATEGORIES[slot] || [];
+
+  const filteredItems = items.filter(item => {
+    if (filterSlot !== 'all' && item.slot !== filterSlot) return false;
+    if (filterSubcategory !== 'all' && item.subcategory !== filterSubcategory) return false;
+    return true;
+  });
+
   if (loading) return <p className="text-wasteland-400 text-center py-4">Загрузка...</p>;
 
   const tabs = [
@@ -176,6 +203,7 @@ export default function AdminPanel() {
     { key: 'ammo', label: 'Патроны' },
     { key: 'currencies', label: 'Валюты' },
     { key: 'shop', label: 'Магазин' },
+    { key: 'campaigns', label: 'Кампании' },
     { key: 'users', label: 'Пользователи' },
     { key: 'backgrounds', label: 'Фоны' },
     { key: 'sounds', label: 'Звуки' },
@@ -184,7 +212,6 @@ export default function AdminPanel() {
   return (
     <div className="space-y-3">
       <h2 className="text-xl font-stylized text-accent-orange mb-4">Админ-панель</h2>
-
       <div className="flex gap-1 overflow-x-auto flex-wrap">
         {tabs.map(t => (
           <button key={t.key} onClick={() => { setTab(t.key); setShowForm(false); setEditing(null); }}
@@ -197,20 +224,55 @@ export default function AdminPanel() {
       {/* ===== ITEMS ===== */}
       {tab === 'items' && (
         <div>
-          <div className="flex gap-2 mb-3 flex-wrap">
+          <div className="flex gap-2 mb-3 flex-wrap items-end">
             <button onClick={() => openForm('item')} className="text-xs bg-accent-orange text-wasteland-900 px-3 py-1.5 rounded">{showForm && formType==='item' ? 'Отмена' : '+ Предмет'}</button>
             <button onClick={handleBatchDelete} disabled={!selectedIds.length} className="text-xs bg-accent-red text-wasteland-900 px-3 py-1.5 rounded disabled:opacity-50">Удалить выбранные ({selectedIds.length})</button>
             <input type="number" value={batchPrice} onChange={e => setBatchPrice(parseInt(e.target.value)||0)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs w-20" placeholder="Цена" />
             <button onClick={handleBatchPrice} disabled={!selectedIds.length} className="text-xs bg-accent-green text-wasteland-900 px-3 py-1.5 rounded disabled:opacity-50">Установить цену</button>
           </div>
 
+          {/* Фильтры */}
+          <div className="flex gap-2 mb-3 flex-wrap">
+            <select value={filterSlot} onChange={e => { setFilterSlot(e.target.value); setFilterSubcategory('all'); }} className="bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-xs">
+              <option value="all">Все категории</option>
+              <option value="weapon">Оружие</option>
+              <option value="armor">Броня</option>
+              <option value="exo">Экзоскелет</option>
+              <option value="mod">Модификация</option>
+              <option value="ammo">Патроны</option>
+              <option value="consumable">Расходник</option>
+              <option value="item">Предмет</option>
+              <option value="currency">Валюта</option>
+            </select>
+            {filterSlot !== 'all' && getAvailableSubcategories(filterSlot).length > 0 && (
+              <select value={filterSubcategory} onChange={e => setFilterSubcategory(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-xs">
+                <option value="all">Все подкатегории</option>
+                {getAvailableSubcategories(filterSlot).map(sc => (
+                  <option key={sc} value={sc}>{sc}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
           {showForm && formType === 'item' && (
             <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
               <h3 className="text-wasteland-300 text-sm font-bold">Новый предмет</h3>
               <input placeholder="Название" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-              <select value={newItem.slot} onChange={e => setNewItem({...newItem, slot: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
-                <option value="weapon">Оружие</option><option value="armor">Броня</option><option value="exo">Экзоскелет</option><option value="mod">Модификация</option><option value="ammo">Патроны</option><option value="consumable">Расходник</option><option value="item">Предмет</option><option value="currency">Валюта</option>
-              </select>
+              
+              <div className="flex gap-2">
+                <select value={newItem.slot} onChange={e => setNewItem({...newItem, slot: e.target.value, subcategory: ''})} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                  <option value="weapon">Оружие</option><option value="armor">Броня</option><option value="exo">Экзоскелет</option><option value="mod">Модификация</option><option value="ammo">Патроны</option><option value="consumable">Расходник</option><option value="item">Предмет</option><option value="currency">Валюта</option>
+                </select>
+                {newItem.slot !== 'ammo' && newItem.slot !== 'currency' && newItem.slot !== 'exo' && getAvailableSubcategories(newItem.slot).length > 0 && (
+                  <select value={newItem.subcategory} onChange={e => setNewItem({...newItem, subcategory: e.target.value})} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                    <option value="">Подкатегория</option>
+                    {getAvailableSubcategories(newItem.slot).map(sc => (
+                      <option key={sc} value={sc}>{sc}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
               {newItem.slot === 'weapon' && (<>
                 <select value={newItem.weapon_type || ''} onChange={e => setNewItem({...newItem, weapon_type: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
                   <option value="">Тип оружия</option><option value="melee">Ближний бой</option><option value="ranged">Дальний бой</option><option value="thrown">Метательное</option>
@@ -220,10 +282,12 @@ export default function AdminPanel() {
                     <option value="">Тип патронов</option>
                     {ammoTypes.map(at => <option key={at.id} value={at.id}>{at.name}</option>)}
                   </select>
-                  <input type="number" placeholder="Макс. патронов" value={newItem.max_ammo || ''} onChange={e => setNewItem({...newItem, max_ammo: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+                  <label className="text-wasteland-400 text-xs">Макс. патронов в магазине</label>
+                  <input type="number" placeholder="0" value={newItem.max_ammo || ''} onChange={e => setNewItem({...newItem, max_ammo: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
                 </>)}
                 <label className="flex items-center gap-2 text-xs text-wasteland-300"><input type="checkbox" checked={newItem.is_heavy || false} onChange={e => setNewItem({...newItem, is_heavy: e.target.checked})} />Тяжёлое оружие</label>
               </>)}
+
               {newItem.slot === 'mod' && (<>
                 <select value={newItem.mod_target || ''} onChange={e => setNewItem({...newItem, mod_target: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
                   <option value="">На что устанавливается</option><option value="weapon">Оружие</option><option value="armor">Броня</option><option value="exo">Экзоскелет</option><option value="any">Любой предмет</option>
@@ -234,23 +298,42 @@ export default function AdminPanel() {
                   </select>
                 )}
               </>)}
+
               {newItem.slot === 'ammo' && (
                 <select value={newItem.ammo_type_id || ''} onChange={e => setNewItem({...newItem, ammo_type_id: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
                   <option value="">Тип патронов</option>
                   {ammoTypes.map(at => <option key={at.id} value={at.id}>{at.name}</option>)}
                 </select>
               )}
+
               <div className="flex gap-2">
-                <input type="number" placeholder="Вес" value={newItem.weight} onChange={e => setNewItem({...newItem, weight: parseFloat(e.target.value)||0})} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-                <input type="number" placeholder="Цена" value={newItem.trade_price} onChange={e => setNewItem({...newItem, trade_price: parseInt(e.target.value)||0})} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+                <div className="flex-1">
+                  <label className="text-wasteland-400 text-xs">Вес (кг)</label>
+                  <input type="number" value={newItem.weight} onChange={e => setNewItem({...newItem, weight: parseFloat(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+                </div>
+                <div className="flex-1">
+                  <label className="text-wasteland-400 text-xs">Базовая цена (РК Кристаллы)</label>
+                  <input type="number" value={newItem.trade_price} onChange={e => setNewItem({...newItem, trade_price: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+                </div>
               </div>
+
               <textarea placeholder="Описание" value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" rows={2} />
+
+              {/* Контейнер */}
+              <label className="flex items-center gap-2 text-xs text-wasteland-300"><input type="checkbox" checked={newItem.is_container} onChange={e => setNewItem({...newItem, is_container: e.target.checked})} />Это контейнер</label>
+              {newItem.is_container && (
+                <>
+                  <input type="number" placeholder="Количество слотов" value={newItem.container_slots} onChange={e => setNewItem({...newItem, container_slots: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+                  <textarea placeholder="Содержимое (JSON) [{item_id, quantity}]" value={newItem.container_items} onChange={e => setNewItem({...newItem, container_items: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm font-mono" rows={3} />
+                </>
+              )}
+
               <button onClick={handleCreateItem} disabled={!newItem.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">Создать</button>
             </div>
           )}
 
           <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-            {items.map(item => (
+            {filteredItems.map(item => (
               <div key={item.id} className={`bg-wasteland-800 p-2 rounded border text-xs flex gap-2 ${selectedIds.includes(item.id) ? 'border-accent-orange' : 'border-wasteland-600'}`}>
                 <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} />
                 {editing === item.id ? (
@@ -264,7 +347,12 @@ export default function AdminPanel() {
                   </div>
                 ) : (
                   <div className="flex-1 flex justify-between items-center">
-                    <span className="text-wasteland-200">{item.name} <span className="text-wasteland-500">({item.slot})</span> <span className="text-accent-yellow text-xs">{item.trade_price}💎</span></span>
+                    <span className="text-wasteland-200">
+                      {item.name} 
+                      <span className="text-wasteland-500"> ({item.slot}{item.subcategory ? '/' + item.subcategory : ''})</span> 
+                      <span className="text-accent-yellow text-xs ml-1">{item.trade_price}💎</span>
+                      {item.is_container && <span className="text-accent-green text-xs ml-1">📦</span>}
+                    </span>
                     <div className="flex gap-1">
                       <button onClick={() => handleEdit(item)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
                       <button onClick={() => handleDelete('items', item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
@@ -494,6 +582,22 @@ export default function AdminPanel() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ===== CAMPAIGNS ===== */}
+      {tab === 'campaigns' && (
+        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+          {campaigns.map(c => (
+            <div key={c.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+              <div>
+                <span className="text-wasteland-200 font-bold">{c.title}</span>
+                <span className="text-wasteland-500 ml-2">👑 {c.master?.username || '?'}</span>
+                <span className="text-wasteland-500 ml-2">{new Date(c.created_at).toLocaleDateString()}</span>
+              </div>
+              <button onClick={() => { if (confirm(`Удалить кампанию "${c.title}"?`)) api.deleteAdminCampaign(c.id).then(load); }} className="text-accent-red hover:text-red-400 text-xs">🗑️</button>
+            </div>
+          ))}
         </div>
       )}
 
