@@ -26,6 +26,13 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [portalEdit, setPortalEdit] = useState(null);
 
+  // Панорама (drag-to-pan)
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0 });
+  const panStartOffset = useRef({ x: 0, y: 0 });
+
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const bgImageRef = useRef(null);
@@ -63,6 +70,8 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         setHistory([{ tokens: [], drawings: [], portals: [] }]);
         setHistoryIndex(0);
       }
+      setPanX(0);
+      setPanY(0);
     } catch (e) { console.error(e); }
   }, [campaignId, sceneType]);
 
@@ -182,7 +191,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  // Автосохранение сцены через WebSocket (без API-запроса)
   const autoSaveScene = () => {
     if (socketRef?.current) {
       socketRef.current.emit('scene_update', { campaignId, sceneType, updates: {} });
@@ -284,25 +292,44 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
   const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const scaleX = canvas.width / (rect.width / zoom);
-    const scaleY = canvas.height / (rect.height / zoom);
-    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
-  };
-
-  const getTokenPos = (e) => {
-    const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return { x: 0, y: 0 };
     const rect = container.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const mouseX = clientX - rect.left;
+    const mouseY = clientY - rect.top;
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
-    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    return {
+      x: (mouseX - panX) * scaleX / zoom,
+      y: (mouseY - panY) * scaleY / zoom
+    };
+  };
+
+  const getTokenPos = (e) => getCanvasPos(e);
+
+  // Панорамирование
+  const startPan = (e) => {
+    if (tool !== 'select' || !isMaster) return;
+    if (e.target.closest('[data-token]') || e.target.closest('[data-portal]')) return;
+    e.preventDefault();
+    isPanning.current = true;
+    panStart.current = { x: e.clientX, y: e.clientY };
+    panStartOffset.current = { x: panX, y: panY };
+  };
+
+  const movePan = (e) => {
+    if (!isPanning.current) return;
+    e.preventDefault();
+    const dx = e.clientX - panStart.current.x;
+    const dy = e.clientY - panStart.current.y;
+    setPanX(panStartOffset.current.x + dx);
+    setPanY(panStartOffset.current.y + dy);
+  };
+
+  const endPan = () => {
+    isPanning.current = false;
   };
 
   // Рисование
@@ -506,7 +533,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     ...(npcs || []).filter(n => n.visibility === 'combat').map(n => ({ type: 'npc', id: n.id, name: n.name, color: '#cc3333' })),
   ];
 
-  // Стили с учётом зума
+  // Стили с учётом зума и панорамы
   const getScaledStyle = (x, y, size, extra = {}) => {
     const canvas = canvasRef.current;
     if (!canvas || !containerRef.current) return { display: 'none' };
@@ -514,7 +541,14 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
     const scaledSize = size / zoom;
-    return { position: 'absolute', left: x / scaleX - scaledSize / 2, top: y / scaleY - scaledSize / 2, width: scaledSize, height: scaledSize, ...extra };
+    return {
+      position: 'absolute',
+      left: (x / scaleX * zoom) + panX - scaledSize / 2,
+      top: (y / scaleY * zoom) + panY - scaledSize / 2,
+      width: scaledSize,
+      height: scaledSize,
+      ...extra
+    };
   };
 
   const getTokenStyle = (token) => {
@@ -655,41 +689,62 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         </div>
       )}
 
-      {/* Холст */}
+      {/* Холст с панорамой */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-wasteland-800 relative"
-        style={{ minHeight: '300px', touchAction: isMaster ? 'none' : 'auto' }}
+        className="flex-1 overflow-hidden bg-wasteland-800 relative"
+        style={{ touchAction: 'none' }}
         onWheel={handleWheel}
         onMouseDown={(e) => {
+          if (e.button === 1 || (e.button === 0 && tool === 'select')) {
+            startPan(e);
+            return;
+          }
           if (tool === 'note') addNoteToken(e);
           else if (tool === 'portal') addPortal(e);
           else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
         }}
-        onMouseMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
-        onMouseUp={() => { endDraw(); endTokenDrag(); }}
-        onMouseLeave={() => { endDraw(); endTokenDrag(); }}
+        onMouseMove={(e) => {
+          if (isPanning.current) { movePan(e); return; }
+          moveDraw(e);
+          moveTokenDrag(e);
+        }}
+        onMouseUp={() => { endDraw(); endTokenDrag(); endPan(); }}
+        onMouseLeave={() => { endDraw(); endTokenDrag(); endPan(); }}
         onTouchStart={(e) => {
+          if (e.touches.length === 2) { startPan(e); return; }
           if (tool === 'note') addNoteToken(e);
           else if (tool === 'portal') addPortal(e);
           else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
         }}
-        onTouchMove={(e) => { moveDraw(e); moveTokenDrag(e); }}
-        onTouchEnd={() => { endDraw(); endTokenDrag(); }}
+        onTouchMove={(e) => {
+          if (isPanning.current) { movePan(e); return; }
+          moveDraw(e);
+          moveTokenDrag(e);
+        }}
+        onTouchEnd={() => { endDraw(); endTokenDrag(); endPan(); }}
         onClick={() => { setContextMenu(null); setPortalEdit(null); }}
       >
-        <div className="relative inline-block" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', filter: `brightness(${brightness}%)` }}>
-          {selectedBg && (
+        <div
+          className="absolute top-0 left-0"
+          style={{
+            transform: `scale(${zoom}) translate(${panX / zoom}px, ${panY / zoom}px)`,
+            transformOrigin: '0 0',
+            filter: `brightness(${brightness}%)`
+          }}
+        >
+          {selectedBg ? (
             <img ref={bgImageRef} src={selectedBg.url} alt="Фон" className="block max-w-none" draggable={false} />
-          )}
-          {!selectedBg && (
-            <div className="flex items-center justify-center h-64 text-wasteland-500 text-sm" style={{ width: '400px' }}>Выберите фон</div>
+          ) : (
+            <div className="flex items-center justify-center h-64 text-wasteland-500 text-sm" style={{ width: '400px' }}>
+              Выберите фон
+            </div>
           )}
           <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: ['pencil', 'eraser'].includes(tool) ? 'auto' : 'none' }} />
 
           {/* Порталы */}
           {portalsRef.current.map(portal => (
-            <div key={portal.id} style={getPortalStyle(portal)}
+            <div key={portal.id} data-portal style={getPortalStyle(portal)}
               onClick={(e) => { e.stopPropagation(); handlePortalClick(portal); }}
               onContextMenu={(e) => handlePortalContext(e, portal)}
               title={`${portal.name} → ${portal.targetScene}:${portal.linkName}`}>
@@ -699,7 +754,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
 
           {/* Токены */}
           {tokens.filter(t => !t.hidden || isMaster).map(token => (
-            <div key={token.id}
+            <div key={token.id} data-token
               onMouseDown={(e) => startTokenDrag(e, token.id)}
               onTouchStart={(e) => startTokenDrag(e, token.id)}
               onContextMenu={(e) => handleTokenContext(e, token)}
@@ -786,7 +841,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
                 </select>
               </div>
               <div>
-                <label className="text-wasteland-400 text-xs">Имя связанного портала (на целевой сцене)</label>
+                <label className="text-wasteland-400 text-xs">Имя связанного портала</label>
                 <input value={portalEdit.linkName || ''} onChange={e => setPortalEdit({ ...portalEdit, linkName: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm" />
               </div>
               <div className="flex gap-2 pt-2">
