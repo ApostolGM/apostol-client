@@ -46,6 +46,10 @@ export const api = {
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
 getAdminCampaigns: () => request('/admin/campaigns'),
 deleteAdminCampaign: (id) => request(`/admin/campaigns/${id}`, { method: 'DELETE' }),
+  getPlaylists: () => request('/playlists'),
+createPlaylist: (name) => request('/playlists', { method: 'POST', body: JSON.stringify({ name }) }),
+updatePlaylist: (id, data) => request(`/playlists/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+deletePlaylist: (id) => request(`/playlists/${id}`, { method: 'DELETE' }),
   // Auth
   register: (u, p) => request('/auth/register', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
   login: (u, p) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
