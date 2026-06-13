@@ -1,6 +1,6 @@
-// src/components/ShopPanel.jsx
 import { useState, useEffect } from 'react';
 import { api } from '../api';
+import useAlert from '../hooks/useAlert';
 
 export default function ShopPanel({ character, onRefresh }) {
   const [shopItems, setShopItems] = useState([]);
@@ -9,6 +9,7 @@ export default function ShopPanel({ character, onRefresh }) {
   const [successMsg, setSuccessMsg] = useState('');
   const [filter, setFilter] = useState('all');
   const [buyingId, setBuyingId] = useState(null);
+  const { alert, AlertModal } = useAlert();
 
   const loadShop = async () => {
     try {
@@ -25,7 +26,7 @@ export default function ShopPanel({ character, onRefresh }) {
 
   const handleBuy = async (item) => {
     if (!character) {
-      setError('Нет персонажа для покупки');
+      await alert('Сначала создайте персонажа.');
       return;
     }
     setBuyingId(item.id);
@@ -37,7 +38,7 @@ export default function ShopPanel({ character, onRefresh }) {
       onRefresh();
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (e) {
-      setError(e.message);
+      await alert(e.message);
     } finally {
       setBuyingId(null);
     }
@@ -71,25 +72,10 @@ export default function ShopPanel({ character, onRefresh }) {
 
       {/* Фильтры */}
       <div className="flex gap-1 overflow-x-auto">
-        <button
-          onClick={() => setFilter('all')}
-          className={`text-xs px-3 py-1 rounded ${filter === 'all' ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}
-        >
-          Всё
-        </button>
+        <button onClick={() => setFilter('all')} className={`text-xs px-3 py-1 rounded ${filter === 'all' ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>Всё</button>
         {slots.map(slot => (
-          <button
-            key={slot}
-            onClick={() => setFilter(slot)}
-            className={`text-xs px-3 py-1 rounded ${filter === slot ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}
-          >
-            {slot === 'weapon' ? 'Оружие' :
-             slot === 'armor' ? 'Броня' :
-             slot === 'exo' ? 'Экзо' :
-             slot === 'ammo' ? 'Патроны' :
-             slot === 'consumable' ? 'Расходники' :
-             slot === 'mod' ? 'Моды' :
-             slot === 'item' ? 'Предметы' : slot}
+          <button key={slot} onClick={() => setFilter(slot)} className={`text-xs px-3 py-1 rounded ${filter === slot ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
+            {slot === 'weapon' ? 'Оружие' : slot === 'armor' ? 'Броня' : slot === 'exo' ? 'Экзо' : slot === 'ammo' ? 'Патроны' : slot === 'consumable' ? 'Расходники' : slot === 'mod' ? 'Моды' : slot === 'item' ? 'Предметы' : slot}
           </button>
         ))}
       </div>
@@ -132,6 +118,7 @@ export default function ShopPanel({ character, onRefresh }) {
           </div>
         ))}
       </div>
+      {AlertModal}
     </div>
   );
 }
