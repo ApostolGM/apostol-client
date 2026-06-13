@@ -1,4 +1,3 @@
-// src/components/SkillListEditor.jsx
 export default function SkillListEditor({ skills = [], allSkills = [], onChange, showSkillSelect = true, showModifier = true }) {
   const addRow = () => {
     onChange([...skills, { skill: '', modifier: 0 }]);
