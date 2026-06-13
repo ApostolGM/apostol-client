@@ -1,6 +1,7 @@
-// src/components/ScenePanel.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
+import useConfirm from '../hooks/useConfirm';
+import usePrompt from '../hooks/usePrompt';
 
 export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, characters }) {
   const [sceneType, setSceneType] = useState('local');
@@ -26,7 +27,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [portalEdit, setPortalEdit] = useState(null);
 
-  // Панорама (drag-to-pan)
+  // Панорама
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const isPanning = useRef(false);
@@ -41,6 +42,9 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const dragOffset = useRef({ x: 0, y: 0 });
   const drawingsRef = useRef([]);
   const portalsRef = useRef([]);
+
+  const { confirm, ConfirmModal } = useConfirm();
+  const { prompt, PromptModal } = usePrompt();
 
   // Загрузка сцены
   const loadScene = useCallback(async () => {
@@ -236,8 +240,8 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   };
 
   // Снапшоты
-  const takeSnapshot = () => {
-    const name = usePrompt('Название снапшота:');
+  const takeSnapshot = async () => {
+    const name = await prompt('Название снапшота:');
     if (!name) return;
     const snapshot = {
       id: Date.now().toString(),
@@ -251,8 +255,9 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     localStorage.setItem(`snapshots_${campaignId}_${sceneType}`, JSON.stringify(newSnapshots));
   };
 
-  const loadSnapshot = (snapshot) => {
-    if (!confirm(`Загрузить снапшот "${snapshot.name}"? Текущее состояние будет потеряно.`)) return;
+  const loadSnapshot = async (snapshot) => {
+    const ok = await confirm(`Загрузить снапшот "${snapshot.name}"? Текущее состояние будет потеряно.`);
+    if (!ok) return;
     setTokens(snapshot.tokens);
     drawingsRef.current = snapshot.drawings;
     portalsRef.current = snapshot.portals;
@@ -301,15 +306,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     const mouseY = clientY - rect.top;
     const scaleX = canvas.width / (rect.width / zoom);
     const scaleY = canvas.height / (rect.height / zoom);
-    return {
-      x: (mouseX - panX) * scaleX / zoom,
-      y: (mouseY - panY) * scaleY / zoom
-    };
+    return { x: (mouseX - panX) * scaleX / zoom, y: (mouseY - panY) * scaleY / zoom };
   };
 
   const getTokenPos = (e) => getCanvasPos(e);
 
-  // Панорамирование
   const startPan = (e) => {
     if (tool !== 'select' || !isMaster) return;
     if (e.target.closest('[data-token]') || e.target.closest('[data-portal]')) return;
@@ -332,7 +333,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     isPanning.current = false;
   };
 
-  // Рисование
   const currentPath = useRef([]);
 
   const startDraw = (e) => {
@@ -391,15 +391,15 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   };
 
   // Порталы
-  const addPortal = (e) => {
+  const addPortal = async (e) => {
     if (!isMaster || tool !== 'portal') return;
     e.preventDefault();
     const pos = getTokenPos(e);
-    const portalName = usePrompt('Имя/ID портала:', 'Портал');
+    const portalName = await prompt('Имя/ID портала:', 'Портал');
     if (!portalName) return;
-    const targetScene = usePrompt('Тип сцены для перехода (local/global):', sceneType === 'local' ? 'global' : 'local');
+    const targetScene = await prompt('Тип сцены для перехода (local/global):', sceneType === 'local' ? 'global' : 'local');
     if (!targetScene || !['local', 'global'].includes(targetScene)) return;
-    const linkName = usePrompt('Имя связанного портала (на целевой сцене):', portalName);
+    const linkName = await prompt('Имя связанного портала (на целевой сцене):', portalName);
     if (!linkName) return;
     const newPortal = { id: `portal_${Date.now()}`, name: portalName, targetScene, linkName, x: pos.x, y: pos.y, visible: true };
     const newPortals = [...portalsRef.current, newPortal];
@@ -424,11 +424,11 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   };
 
   // Заметки
-  const addNoteToken = (e) => {
+  const addNoteToken = async (e) => {
     if (!isMaster || tool !== 'note') return;
     e.preventDefault();
     const pos = getTokenPos(e);
-    const text = usePrompt('Текст заметки:');
+    const text = await prompt('Текст заметки:');
     if (text) {
       const newToken = { id: `note_${Date.now()}`, type: 'note', label: '📝', color: '#ffcc00', x: pos.x, y: pos.y, note: text, hidden: false };
       syncTokens([...tokens, newToken]);
@@ -454,7 +454,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     syncTokens(tokens.filter(t => t.id !== tokenId));
   };
 
-  // Контекстное меню
   const handleTokenContext = (e, token) => {
     if (!isMaster) return;
     e.preventDefault();
@@ -533,7 +532,6 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     ...(npcs || []).filter(n => n.visibility === 'combat').map(n => ({ type: 'npc', id: n.id, name: n.name, color: '#cc3333' })),
   ];
 
-  // Стили с учётом зума и панорамы
   const getScaledStyle = (x, y, size, extra = {}) => {
     const canvas = canvasRef.current;
     if (!canvas || !containerRef.current) return { display: 'none' };
@@ -689,17 +687,14 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         </div>
       )}
 
-      {/* Холст с панорамой */}
+      {/* Холст */}
       <div
         ref={containerRef}
         className="flex-1 overflow-hidden bg-wasteland-800 relative"
         style={{ touchAction: 'none' }}
         onWheel={handleWheel}
         onMouseDown={(e) => {
-          if (e.button === 1 || (e.button === 0 && tool === 'select')) {
-            startPan(e);
-            return;
-          }
+          if (e.button === 1 || (e.button === 0 && tool === 'select')) { startPan(e); return; }
           if (tool === 'note') addNoteToken(e);
           else if (tool === 'portal') addPortal(e);
           else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
@@ -870,6 +865,9 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
           </div>
         </div>
       )}
+
+      {ConfirmModal}
+      {PromptModal}
     </div>
   );
 }
