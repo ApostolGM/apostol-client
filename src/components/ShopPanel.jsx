@@ -1,3 +1,4 @@
+// src/components/ShopPanel.jsx
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 import useAlert from '../hooks/useAlert';
@@ -9,7 +10,12 @@ export default function ShopPanel({ character, onRefresh }) {
   const [successMsg, setSuccessMsg] = useState('');
   const [filter, setFilter] = useState('all');
   const [buyingId, setBuyingId] = useState(null);
+  const [balance, setBalance] = useState(character?.currency || 0);
   const { alert, AlertModal } = useAlert();
+
+  useEffect(() => {
+    setBalance(character?.currency || 0);
+  }, [character]);
 
   const loadShop = async () => {
     try {
@@ -34,7 +40,8 @@ export default function ShopPanel({ character, onRefresh }) {
     setSuccessMsg('');
     try {
       const result = await api.buyItem(character.id, item.id, 1);
-      setSuccessMsg(`Куплено: ${item.name} за ${result.price} РК`);
+      setSuccessMsg(`Куплено: ${item.name} за ${result.price} 💎`);
+      setBalance(result.new_balance);
       onRefresh();
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (e) {
@@ -70,9 +77,18 @@ export default function ShopPanel({ character, onRefresh }) {
         <p className="text-wasteland-500 text-sm text-center py-4">Создайте персонажа, чтобы покупать предметы</p>
       )}
 
+      {character && (
+        <div className="bg-wasteland-800 p-3 rounded-lg border border-wasteland-600 flex items-center gap-2">
+          <span className="text-wasteland-300 text-sm">💰 Баланс:</span>
+          <span className="text-accent-orange font-bold text-lg">{balance}</span>
+        </div>
+      )}
+
       {/* Фильтры */}
       <div className="flex gap-1 overflow-x-auto">
-        <button onClick={() => setFilter('all')} className={`text-xs px-3 py-1 rounded ${filter === 'all' ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>Всё</button>
+        <button onClick={() => setFilter('all')} className={`text-xs px-3 py-1 rounded ${filter === 'all' ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
+          Всё
+        </button>
         {slots.map(slot => (
           <button key={slot} onClick={() => setFilter(slot)} className={`text-xs px-3 py-1 rounded ${filter === slot ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
             {slot === 'weapon' ? 'Оружие' : slot === 'armor' ? 'Броня' : slot === 'exo' ? 'Экзо' : slot === 'ammo' ? 'Патроны' : slot === 'consumable' ? 'Расходники' : slot === 'mod' ? 'Моды' : slot === 'item' ? 'Предметы' : slot}
@@ -88,7 +104,10 @@ export default function ShopPanel({ character, onRefresh }) {
         {filtered.map(item => (
           <div key={item.id} className="bg-wasteland-800 p-3 rounded-lg border border-wasteland-600 flex justify-between items-start">
             <div className="flex-1 min-w-0">
-              <h3 className="text-wasteland-100 text-sm font-bold">{item.name}</h3>
+              <h3 className="text-wasteland-100 text-sm font-bold">
+                {item.icon && <span className="mr-1">{item.icon}</span>}
+                {item.name}
+              </h3>
               <div className="flex flex-wrap gap-x-2 text-xs mt-0.5">
                 <span className="text-wasteland-400">{item.slot}</span>
                 {item.weapon_type && <span className="text-wasteland-500">{item.weapon_type}</span>}
