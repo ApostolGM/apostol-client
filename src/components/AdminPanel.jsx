@@ -8,6 +8,8 @@ import ItemListEditor from './ItemListEditor';
 
 const STANDARD_TAGS = ['бой', 'выживание', 'социальное', 'наука/инженерия', 'торговля'];
 
+const ITEM_ICONS = ['🗡️','🔫','🪓','🏹','🛡️','🦺','🤖','💠','🥫','💧','💉','🔦','🪢','🔧','💎','⚙️','📦','🧪','📜','🔑'];
+
 export default function AdminPanel() {
   const [tab, setTab] = useState('items');
   const [items, setItems] = useState([]);
@@ -23,6 +25,7 @@ export default function AdminPanel() {
   const [campaigns, setCampaigns] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
+  const [characteristics, setCharacteristics] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -37,35 +40,39 @@ export default function AdminPanel() {
 
   // Form states
   const [newItem, setNewItem] = useState({
-    name: '', slot: 'item', subcategory: '', weight: 0, condition_percent: 100,
+    name: '', slot: 'item', subcategory: '', icon: '', weight: 0, condition_percent: 100,
     description: '', trade_price: 0, is_global: true, is_container: false,
     container_slots: 0, container_items: []
   });
-  const [newPerk, setNewPerk] = useState({ name: '', type: 'positive', cost: 0, description: '', effect_text: '', effect_modifiers: [], tags: [], is_global: true });
+  const [newPerk, setNewPerk] = useState({ name: '', type: 'positive', cost: 0, description: '', effect_modifiers: [], tags: [], is_global: true });
   const [newProfession, setNewProfession] = useState({ name: '', description: '', starter_skills: [], is_global: true });
-  const [newSkill, setNewSkill] = useState({ name: '', characteristic: '', tags: [], is_global: true });
+  const [newSkill, setNewSkill] = useState({ name: '', characteristic_id: '', tags: [], is_global: true });
   const [newAmmoType, setNewAmmoType] = useState({ name: '' });
-  const [newCurrency, setNewCurrency] = useState({ name: '', icon: '💎', item_id: '' });
+  const [newCurrency, setNewCurrency] = useState({ name: '', icon: '💎' });
   const [newPreset, setNewPreset] = useState({ name: '', is_active: false, price_multiplier: 1.0, items: [] });
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newSubcategory, setNewSubcategory] = useState({ slot: 'item', name: '' });
+  const [newChar, setNewChar] = useState({ name: '', short_name: '', description: '' });
+  const [newGlobalSound, setNewGlobalSound] = useState({ name: '', file_url: '', category: 'ambient', playlist_id: '' });
+  const [uploadingSound, setUploadingSound] = useState(false);
 
   const { confirm, ConfirmModal } = useConfirm();
   const { prompt, PromptModal } = usePrompt();
 
   const load = async () => {
     setLoading(true);
-    const [i, p, prof, s, at, cur, usr, sp, bg, sd, camp, pl, sub] = await Promise.all([
+    const [i, p, prof, s, at, cur, usr, sp, bg, sd, camp, pl, sub, chars] = await Promise.all([
       api.getAdminItems(), api.getAdminPerks(), api.getAdminProfessions(), api.getAdminSkills(),
       api.getAmmoTypes(), api.getCurrencies(), api.getAdminUsers(), api.getShopPresets(),
       api.getAdminBackgrounds(), api.getAdminSounds(), api.getAdminCampaigns().catch(() => []),
-      api.getPlaylists().catch(() => []), api.getSubcategories().catch(() => [])
+      api.getPlaylists().catch(() => []), api.getSubcategories().catch(() => []),
       api.getCharacteristics().catch(() => [])
     ]);
     setItems(i); setPerks(p); setProfessions(prof); setSkills(s);
     setAmmoTypes(at); setCurrencies(cur); setUsers(usr); setShopPresets(sp);
     setGlobalBackgrounds(bg); setGlobalSounds(sd);
     setCampaigns(camp); setPlaylists(pl); setSubcategories(sub);
+    setCharacteristics(chars);
     setLoading(false);
   };
 
@@ -76,7 +83,7 @@ export default function AdminPanel() {
     return subcategories.filter(s => s.slot === slot);
   };
 
-  // Open form for editing/creating
+  // Open form
   const openForm = (type, editObj = null) => {
     setFormType(type);
     setEditId(editObj?.id || null);
@@ -87,34 +94,36 @@ export default function AdminPanel() {
         if (editObj) {
           setNewItem({
             name: editObj.name || '', slot: editObj.slot || 'item', subcategory: editObj.subcategory || '',
-            weight: editObj.weight || 0, condition_percent: editObj.condition_percent ?? 100,
+            icon: editObj.icon || '', weight: editObj.weight || 0, condition_percent: editObj.condition_percent ?? 100,
             description: editObj.description || '', trade_price: editObj.trade_price || 0,
             is_global: editObj.is_global ?? true, is_container: editObj.is_container || false,
             container_slots: editObj.container_slots || 0, container_items: editObj.container_items || []
           });
         } else {
-          setNewItem({ name: '', slot: 'item', subcategory: '', weight: 0, condition_percent: 100, description: '', trade_price: 0, is_global: true, is_container: false, container_slots: 0, container_items: [] });
+          setNewItem({ name: '', slot: 'item', subcategory: '', icon: '', weight: 0, condition_percent: 100, description: '', trade_price: 0, is_global: true, is_container: false, container_slots: 0, container_items: [] });
         }
         break;
       case 'perk':
-        setNewPerk(editObj ? { ...editObj, effect_modifiers: editObj.effect_modifiers || [], tags: editObj.tags || [] } : { name: '', type: 'positive', cost: 0, description: '', effect_text: '', effect_modifiers: [], tags: [], is_global: true });
+        setNewPerk(editObj ? { ...editObj, effect_modifiers: editObj.effect_modifiers || [], tags: editObj.tags || [] } : { name: '', type: 'positive', cost: 0, description: '', effect_modifiers: [], tags: [], is_global: true });
         break;
       case 'profession':
         setNewProfession(editObj ? { ...editObj, starter_skills: editObj.starter_skills || [] } : { name: '', description: '', starter_skills: [], is_global: true });
         break;
       case 'skill':
-        setNewSkill(editObj ? { ...editObj, tags: editObj.tags || [] } : { name: '', characteristic: '', tags: [], is_global: true });
+        setNewSkill(editObj ? { ...editObj, tags: editObj.tags || [], characteristic_id: editObj.characteristic_id || '' } : { name: '', characteristic_id: '', tags: [], is_global: true });
         break;
       case 'ammo': setNewAmmoType({ name: '' }); break;
-      case 'currency': setNewCurrency({ name: '', icon: '💎', item_id: '' }); break;
+      case 'currency': setNewCurrency({ name: '', icon: '💎' }); break;
       case 'preset': setNewPreset({ name: '', is_active: false, price_multiplier: 1.0, items: [] }); break;
       case 'playlist': setNewPlaylistName(''); break;
       case 'subcategory': setNewSubcategory({ slot: 'item', name: '' }); break;
+      case 'characteristic': setNewChar({ name: '', short_name: '', description: '' }); break;
+      case 'globalSound': setNewGlobalSound({ name: '', file_url: '', category: 'ambient', playlist_id: '' }); break;
       default: break;
     }
   };
 
-  // ===== SAVE / DELETE WITH LOCAL UPDATE =====
+  // ===== SAVE / DELETE =====
 
   // Items
   const handleSaveItem = async () => {
@@ -272,6 +281,43 @@ export default function AdminPanel() {
     setSubcategories(prev => prev.filter(s => s.id !== id));
   };
 
+  // Characteristics
+  const handleCreateChar = async () => {
+    if (!newChar.name.trim()) return;
+    const created = await api.createCharacteristic(newChar);
+    setCharacteristics(prev => [...prev, created]);
+    setNewChar({ name: '', short_name: '', description: '' });
+    setShowForm(false);
+  };
+  const handleDeleteChar = async (id) => {
+    if (!await confirm('Удалить характеристику?')) return;
+    await api.deleteCharacteristic(id);
+    setCharacteristics(prev => prev.filter(c => c.id !== id));
+  };
+
+  // Global sounds
+  const handleUploadGlobalSound = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 40 * 1024 * 1024) { alert('Файл слишком большой.'); return; }
+    setUploadingSound(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const result = await api.uploadSound(reader.result, newGlobalSound.name || file.name, null, true);
+        setNewGlobalSound({ name: '', file_url: '', category: 'ambient', playlist_id: '' });
+        load();
+      } catch (err) { alert('Ошибка загрузки: ' + err.message); }
+      finally { setUploadingSound(false); }
+    };
+    reader.readAsDataURL(file);
+  };
+  const handleDeleteGlobalSound = async (id) => {
+    if (!await confirm('Удалить звук?')) return;
+    await api.deleteAdminSound(id);
+    setGlobalSounds(prev => prev.filter(s => s.id !== id));
+  };
+
   // Users
   const handleToggleUserRole = async (user) => {
     const newRole = user.role === 'admin' ? 'player' : 'admin';
@@ -291,19 +337,12 @@ export default function AdminPanel() {
     setCampaigns(prev => prev.filter(c => c.id !== campaign.id));
   };
 
-  // Backgrounds / Sounds
+  // Backgrounds
   const handleDeleteBackground = async (id) => {
     if (!await confirm('Удалить фон?')) return;
     await api.deleteAdminBackground(id);
     setGlobalBackgrounds(prev => prev.filter(b => b.id !== id));
   };
-  const handleDeleteSound = async (id) => {
-    if (!await confirm('Удалить звук?')) return;
-    await api.deleteAdminSound(id);
-    setGlobalSounds(prev => prev.filter(s => s.id !== id));
-  };
-  
-  const [characteristics, setCharacteristics] = useState([]);
 
   // Batch operations
   const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -331,12 +370,20 @@ export default function AdminPanel() {
   if (loading) return <p className="text-wasteland-400 text-center py-4">Загрузка...</p>;
 
   const tabs = [
-    { key: 'items', label: 'Предметы' }, { key: 'perks', label: 'Перки' }, { key: 'professions', label: 'Профессии' },
-    { key: 'skills', label: 'Навыки' }, { key: 'ammo', label: 'Патроны' }, { key: 'currencies', label: 'Валюты' },
-    { key: 'shop', label: 'Магазин' }, { key: 'playlists', label: 'Плейлисты' }, { key: 'subcategories', label: 'Подкатегории' },
-    { key: 'campaigns', label: 'Кампании' }, { key: 'users', label: 'Пользователи' }, { key: 'backgrounds', label: 'Фоны' },
+    { key: 'items', label: 'Предметы' },
+    { key: 'perks', label: 'Перки' },
+    { key: 'professions', label: 'Профессии' },
+    { key: 'skills', label: 'Навыки' },
+    { key: 'characteristics', label: 'Хар-ки' },
+    { key: 'ammo', label: 'Патроны' },
+    { key: 'currencies', label: 'Валюты' },
+    { key: 'shop', label: 'Магазин' },
+    { key: 'playlists', label: 'Плейлисты' },
+    { key: 'subcategories', label: 'Подкатегории' },
     { key: 'sounds', label: 'Звуки' },
-    { key: 'characteristics', label: 'Характеристики' },
+    { key: 'campaigns', label: 'Кампании' },
+    { key: 'users', label: 'Пользователи' },
+    { key: 'backgrounds', label: 'Фоны' },
   ];
 
   return (
@@ -363,30 +410,6 @@ export default function AdminPanel() {
             <button onClick={handleBatchPrice} disabled={!selectedIds.length} className="text-xs bg-accent-green text-wasteland-900 px-3 py-1.5 rounded disabled:opacity-50">Установить цену</button>
           </div>
 
-          {tab === 'characteristics' && (
-  <div>
-    <button onClick={() => openForm('characteristic')} className="text-xs bg-accent-orange text-wasteland-900 px-3 py-1.5 rounded mb-3">
-      {showForm && formType==='characteristic' ? 'Отмена' : '+ Характеристика'}
-    </button>
-    {showForm && formType === 'characteristic' && (
-      <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
-        <input placeholder="Название" value={newChar.name} onChange={e => setNewChar({...newChar, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-        <input placeholder="Кратко (СИЛ, ЛВК...)" value={newChar.short_name} onChange={e => setNewChar({...newChar, short_name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-        <input placeholder="Описание" value={newChar.description} onChange={e => setNewChar({...newChar, description: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-        <button onClick={handleCreateChar} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold">Создать</button>
-      </div>
-    )}
-    <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-      {characteristics.map(ch => (
-        <div key={ch.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
-          <span className="text-wasteland-200">{ch.short_name} — {ch.name}</span>
-          <button onClick={() => api.deleteCharacteristic(ch.id).then(load)} className="text-accent-red hover:text-red-400">🗑️</button>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
-
           {/* Filters */}
           <div className="flex gap-2 mb-3 flex-wrap">
             <select value={filterSlot} onChange={e => { setFilterSlot(e.target.value); setFilterSubcategory('all'); }} className="bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-xs">
@@ -409,7 +432,15 @@ export default function AdminPanel() {
           {showForm && formType === 'item' && (
             <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
               <h3 className="text-wasteland-300 text-sm font-bold">{editId ? 'Редактировать предмет' : 'Новый предмет'}</h3>
-              <input placeholder="Название" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              
+              <div className="flex gap-2">
+                <input placeholder="Название" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+                <select value={newItem.icon} onChange={e => setNewItem({...newItem, icon: e.target.value})} className="w-16 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm text-center">
+                  <option value="">—</option>
+                  {ITEM_ICONS.map(icon => <option key={icon} value={icon}>{icon}</option>)}
+                </select>
+              </div>
+
               <div className="flex gap-2">
                 <select value={newItem.slot} onChange={e => setNewItem({...newItem, slot: e.target.value, subcategory: '', weapon_type: '', mod_target: '', weapon_mod_subtype: '', ammo_type_id: '' })} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
                   <option value="weapon">Оружие</option><option value="armor">Броня</option><option value="exo">Экзоскелет</option>
@@ -489,7 +520,13 @@ export default function AdminPanel() {
               <div key={item.id} className={`bg-wasteland-800 p-2 rounded border text-xs flex gap-2 ${selectedIds.includes(item.id) ? 'border-accent-orange' : 'border-wasteland-600'}`}>
                 <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} />
                 <div className="flex-1 flex justify-between items-center">
-                  <span className="text-wasteland-200">{item.name} <span className="text-wasteland-500">({item.slot}{item.subcategory ? '/'+item.subcategory : ''})</span> <span className="text-accent-yellow text-xs">{item.trade_price}💎</span>{item.is_container && <span className="text-accent-green text-xs ml-1">📦</span>}</span>
+                  <span className="text-wasteland-200">
+                    {item.icon && <span className="mr-1">{item.icon}</span>}
+                    {item.name}
+                    <span className="text-wasteland-500"> ({item.slot}{item.subcategory ? '/'+item.subcategory : ''})</span>
+                    <span className="text-accent-yellow text-xs ml-1">{item.trade_price}💎</span>
+                    {item.is_container && <span className="text-accent-green text-xs ml-1">📦</span>}
+                  </span>
                   <div className="flex gap-1">
                     <button onClick={() => openForm('item', item)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
                     <button onClick={() => handleDeleteItem(item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
@@ -513,8 +550,7 @@ export default function AdminPanel() {
                 <option value="positive">Позитивный</option><option value="negative">Негативный</option><option value="neutral">Нейтральный</option>
               </select>
               <input type="number" placeholder="Стоимость" value={newPerk.cost} onChange={e => setNewPerk({...newPerk, cost: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-              <textarea placeholder="Описание" value={newPerk.description} onChange={e => setNewPerk({...newPerk, description: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" rows={2} />
-              <input placeholder="Текст эффекта" value={newPerk.effect_text} onChange={e => setNewPerk({...newPerk, effect_text: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              <textarea placeholder="Описание (включая эффект)" value={newPerk.description} onChange={e => setNewPerk({...newPerk, description: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" rows={3} />
               <SkillListEditor skills={newPerk.effect_modifiers} allSkills={skills} onChange={(val) => setNewPerk({...newPerk, effect_modifiers: val})} showSkillSelect={true} showModifier={true} />
               <button onClick={handleSavePerk} disabled={!newPerk.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">{editId ? 'Сохранить' : 'Создать'}</button>
             </div>
@@ -568,20 +604,19 @@ export default function AdminPanel() {
             <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
               <h3 className="text-wasteland-300 text-sm font-bold">{editId ? 'Редактировать навык' : 'Новый навык'}</h3>
               <input placeholder="Название" value={newSkill.name} onChange={e => setNewSkill({...newSkill, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-              <input placeholder="Характеристика" value={newSkill.characteristic} onChange={e => setNewSkill({...newSkill, characteristic: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              <select value={newSkill.characteristic_id} onChange={e => setNewSkill({...newSkill, characteristic_id: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                <option value="">Характеристика</option>
+                {characteristics.map(ch => <option key={ch.id} value={ch.id}>{ch.short_name} — {ch.name}</option>)}
+              </select>
               <div>
                 <label className="text-wasteland-400 text-xs mb-1 block">Теги</label>
                 <div className="flex flex-wrap gap-2">
                   {STANDARD_TAGS.map(tag => (
                     <label key={tag} className="flex items-center gap-1 text-xs text-wasteland-300">
-                      <input
-                        type="checkbox"
-                        checked={newSkill.tags.includes(tag)}
-                        onChange={(e) => {
-                          if (e.target.checked) setNewSkill({...newSkill, tags: [...newSkill.tags, tag]});
-                          else setNewSkill({...newSkill, tags: newSkill.tags.filter(t => t !== tag)});
-                        }}
-                      />
+                      <input type="checkbox" checked={newSkill.tags.includes(tag)} onChange={(e) => {
+                        if (e.target.checked) setNewSkill({...newSkill, tags: [...newSkill.tags, tag]});
+                        else setNewSkill({...newSkill, tags: newSkill.tags.filter(t => t !== tag)});
+                      }} />
                       {tag}
                     </label>
                   ))}
@@ -598,6 +633,32 @@ export default function AdminPanel() {
                   <button onClick={() => openForm('skill', skill)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
                   <button onClick={() => handleDeleteSkill(skill.id)} className="text-accent-red hover:text-red-400">🗑️</button>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===== CHARACTERISTICS ===== */}
+      {tab === 'characteristics' && (
+        <div>
+          <button onClick={() => openForm('characteristic')} className="text-xs bg-accent-orange text-wasteland-900 px-3 py-1.5 rounded mb-3">
+            {showForm && formType==='characteristic' ? 'Отмена' : '+ Характеристика'}
+          </button>
+          {showForm && formType === 'characteristic' && (
+            <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
+              <h3 className="text-wasteland-300 text-sm font-bold">Новая характеристика</h3>
+              <input placeholder="Название" value={newChar.name} onChange={e => setNewChar({...newChar, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              <input placeholder="Кратко (СИЛ, ЛВК...)" value={newChar.short_name} onChange={e => setNewChar({...newChar, short_name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              <input placeholder="Описание" value={newChar.description} onChange={e => setNewChar({...newChar, description: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              <button onClick={handleCreateChar} disabled={!newChar.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">Создать</button>
+            </div>
+          )}
+          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+            {characteristics.map(ch => (
+              <div key={ch.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+                <span className="text-wasteland-200">{ch.short_name} — {ch.name}</span>
+                <button onClick={() => handleDeleteChar(ch.id)} className="text-accent-red hover:text-red-400">🗑️</button>
               </div>
             ))}
           </div>
@@ -636,12 +697,7 @@ export default function AdminPanel() {
               <input placeholder="Например: РК Кристаллы" value={newCurrency.name} onChange={e => setNewCurrency({...newCurrency, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
               <label className="text-wasteland-400 text-xs">Иконка (эмодзи)</label>
               <input placeholder="💎" value={newCurrency.icon} onChange={e => setNewCurrency({...newCurrency, icon: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-              <label className="text-wasteland-400 text-xs">Привязанный предмет (валюта)</label>
-              <select value={newCurrency.item_id} onChange={e => setNewCurrency({...newCurrency, item_id: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
-                <option value="">Выберите предмет</option>
-                {items.filter(i => i.slot === 'currency').map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-              </select>
-              <button onClick={handleCreateCurrency} disabled={!newCurrency.name || !newCurrency.item_id} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">Создать</button>
+              <button onClick={handleCreateCurrency} disabled={!newCurrency.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">Создать</button>
             </div>
           )}
           <div className="space-y-1 max-h-[60vh] overflow-y-auto">
@@ -664,7 +720,8 @@ export default function AdminPanel() {
               <h3 className="text-wasteland-300 text-sm font-bold">{editId ? 'Редактировать пресет' : 'Новый пресет'}</h3>
               <input placeholder="Название" value={newPreset.name} onChange={e => setNewPreset({...newPreset, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
               <label className="flex items-center gap-2 text-xs text-wasteland-300"><input type="checkbox" checked={newPreset.is_active} onChange={e => setNewPreset({...newPreset, is_active: e.target.checked})} />Активен</label>
-              <input type="number" step="0.1" placeholder="Множитель цены" value={newPreset.price_multiplier} onChange={e => setNewPreset({...newPreset, price_multiplier: parseFloat(e.target.value)||1.0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              <label className="text-wasteland-400 text-xs">Множитель цены <span className="text-wasteland-500">(1.0 = обычная, 0.5 = скидка 50%, 2.0 = наценка 100%)</span></label>
+              <input type="number" step="0.1" value={newPreset.price_multiplier} onChange={e => setNewPreset({...newPreset, price_multiplier: parseFloat(e.target.value)||1.0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
               <ItemListEditor items={newPreset.items} allItems={items} onChange={(val) => setNewPreset({...newPreset, items: val})} showPrice={true} />
               <button onClick={handleSavePreset} disabled={!newPreset.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">{editId ? 'Сохранить' : 'Создать'}</button>
             </div>
@@ -729,6 +786,40 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* ===== SOUNDS (GLOBAL) ===== */}
+      {tab === 'sounds' && (
+        <div>
+          <button onClick={() => openForm('globalSound')} className="text-xs bg-accent-orange text-wasteland-900 px-3 py-1.5 rounded mb-3">
+            {showForm && formType==='globalSound' ? 'Отмена' : '+ Загрузить звук'}
+          </button>
+          {showForm && formType === 'globalSound' && (
+            <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
+              <h3 className="text-wasteland-300 text-sm font-bold">Загрузить глобальный звук</h3>
+              <input placeholder="Название" value={newGlobalSound.name} onChange={e => setNewGlobalSound({...newGlobalSound, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+              <label className={`inline-block bg-wasteland-700 hover:bg-wasteland-600 text-wasteland-300 text-xs font-bold px-4 py-2 rounded cursor-pointer text-center ${uploadingSound ? 'opacity-50' : ''}`}>
+                {uploadingSound ? '⏳ Загрузка...' : '📁 Выбрать аудиофайл'}
+                <input type="file" accept="audio/*" className="hidden" onChange={handleUploadGlobalSound} disabled={uploadingSound} />
+              </label>
+              <select value={newGlobalSound.category} onChange={e => setNewGlobalSound({...newGlobalSound, category: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                <option value="ambient">Эмбиент</option><option value="combat">Бой</option><option value="music">Музыка</option><option value="sfx">Эффекты</option><option value="общее">Общее</option>
+              </select>
+              <select value={newGlobalSound.playlist_id} onChange={e => setNewGlobalSound({...newGlobalSound, playlist_id: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+                <option value="">Без плейлиста</option>
+                {playlists.map(pl => <option key={pl.id} value={pl.id}>{pl.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+            {globalSounds.map(s => (
+              <div key={s.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+                <span className="text-wasteland-200">{s.name}</span>
+                <button onClick={() => handleDeleteGlobalSound(s.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ===== CAMPAIGNS ===== */}
       {tab === 'campaigns' && (
         <div className="space-y-1 max-h-[60vh] overflow-y-auto">
@@ -756,9 +847,7 @@ export default function AdminPanel() {
                 <span className="text-wasteland-500 ml-2">{new Date(u.created_at).toLocaleDateString()}</span>
               </div>
               <div className="flex gap-1">
-                <button onClick={() => handleToggleUserRole(u)} className="text-wasteland-400 hover:text-wasteland-200 text-xs">
-                  {u.role === 'admin' ? '→ player' : '→ admin'}
-                </button>
+                <button onClick={() => handleToggleUserRole(u)} className="text-wasteland-400 hover:text-wasteland-200 text-xs">{u.role === 'admin' ? '→ player' : '→ admin'}</button>
                 <button onClick={() => handleDeleteUser(u.id)} className="text-accent-red hover:text-red-400 text-xs">🗑️</button>
               </div>
             </div>
@@ -776,18 +865,6 @@ export default function AdminPanel() {
                 <span className="text-wasteland-200">{bg.name}</span>
               </div>
               <button onClick={() => handleDeleteBackground(bg.id)} className="text-accent-red hover:text-red-400">🗑️</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ===== SOUNDS ===== */}
-      {tab === 'sounds' && (
-        <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-          {globalSounds.map(s => (
-            <div key={s.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
-              <span className="text-wasteland-200">{s.name}</span>
-              <button onClick={() => handleDeleteSound(s.id)} className="text-accent-red hover:text-red-400">🗑️</button>
             </div>
           ))}
         </div>
