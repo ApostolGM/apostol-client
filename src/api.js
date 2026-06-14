@@ -63,6 +63,12 @@ deletePlaylist: (id) => request(`/playlists/${id}`, { method: 'DELETE' }),
   login: (u, p) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
   me: () => request('/auth/me'),
 
+  // Characteristics
+getCharacteristics: () => request('/characteristics'),
+createCharacteristic: (data) => request('/characteristics', { method: 'POST', body: JSON.stringify(data) }),
+updateCharacteristic: (id, data) => request(`/characteristics/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+deleteCharacteristic: (id) => request(`/characteristics/${id}`, { method: 'DELETE' }),
+  
   // Campaigns
   getCampaigns: () => request('/campaigns'),
   getCampaign: (id) => request(`/campaigns/${id}`),
