@@ -44,35 +44,12 @@ export const api = {
   fetch: (path, options = {}) => request(path, options),
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
-getAdminCampaigns: () => request('/admin/campaigns'),
-deleteAdminCampaign: (id) => request(`/admin/campaigns/${id}`, { method: 'DELETE' }),
-  getPlaylists: () => request('/playlists'),
-createPlaylist: (name) => request('/playlists', { method: 'POST', body: JSON.stringify({ name }) }),
-updatePlaylist: (id, data) => request(`/playlists/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-deletePlaylist: (id) => request(`/playlists/${id}`, { method: 'DELETE' }),
-  // Subcategories
-getSubcategories: () => request('/subcategories'),
-createSubcategory: (slot, name) => request('/subcategories', { method: 'POST', body: JSON.stringify({ slot, name }) }),
-deleteSubcategory: (id) => request(`/subcategories/${id}`, { method: 'DELETE' }),
 
-getPlaylists: () => request('/playlists'),
-createPlaylist: (name) => request('/playlists', { method: 'POST', body: JSON.stringify({ name }) }),
-deletePlaylist: (id) => request(`/playlists/${id}`, { method: 'DELETE' }),
   // Auth
   register: (u, p) => request('/auth/register', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
   login: (u, p) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) }),
   me: () => request('/auth/me'),
 
-  // Characteristics
-  getCharacteristics: () => request('/characteristics'),
-createCharacteristic: (data) => request('/characteristics', { method: 'POST', body: JSON.stringify(data) }),
-updateCharacteristic: (id, data) => request(`/characteristics/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-deleteCharacteristic: (id) => request(`/characteristics/${id}`, { method: 'DELETE' }),
-getCharacteristics: () => request('/characteristics'),
-createCharacteristic: (data) => request('/characteristics', { method: 'POST', body: JSON.stringify(data) }),
-updateCharacteristic: (id, data) => request(`/characteristics/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-deleteCharacteristic: (id) => request(`/characteristics/${id}`, { method: 'DELETE' }),
-  
   // Campaigns
   getCampaigns: () => request('/campaigns'),
   getCampaign: (id) => request(`/campaigns/${id}`),
@@ -93,6 +70,12 @@ deleteCharacteristic: (id) => request(`/characteristics/${id}`, { method: 'DELET
 
   // Skills
   getSkills: () => request('/skills'),
+
+  // Characteristics
+  getCharacteristics: () => request('/characteristics'),
+  createCharacteristic: (data) => request('/characteristics', { method: 'POST', body: JSON.stringify(data) }),
+  updateCharacteristic: (id, data) => request(`/characteristics/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCharacteristic: (id) => request(`/characteristics/${id}`, { method: 'DELETE' }),
 
   // Characters
   createCharacter: (data) => request('/characters', { method: 'POST', body: JSON.stringify(data) }),
@@ -197,6 +180,16 @@ deleteCharacteristic: (id) => request(`/characteristics/${id}`, { method: 'DELET
   createCurrency: (data) => request('/currencies', { method: 'POST', body: JSON.stringify(data) }),
   deleteCurrency: (id) => request(`/currencies/${id}`, { method: 'DELETE' }),
 
+  // Playlists
+  getPlaylists: () => request('/playlists'),
+  createPlaylist: (name) => request('/playlists', { method: 'POST', body: JSON.stringify({ name }) }),
+  deletePlaylist: (id) => request(`/playlists/${id}`, { method: 'DELETE' }),
+
+  // Subcategories
+  getSubcategories: () => request('/subcategories'),
+  createSubcategory: (slot, name) => request('/subcategories', { method: 'POST', body: JSON.stringify({ slot, name }) }),
+  deleteSubcategory: (id) => request(`/subcategories/${id}`, { method: 'DELETE' }),
+
   // Admin
   getAdminItems: () => request('/admin/items'),
   createAdminItem: (data) => request('/admin/items', { method: 'POST', body: JSON.stringify(data) }),
@@ -215,4 +208,6 @@ deleteCharacteristic: (id) => request(`/characteristics/${id}`, { method: 'DELET
   deleteAdminBackground: (id) => request(`/admin/backgrounds/${id}`, { method: 'DELETE' }),
   getAdminSounds: () => request('/admin/sounds'),
   deleteAdminSound: (id) => request(`/admin/sounds/${id}`, { method: 'DELETE' }),
+  getAdminCampaigns: () => request('/admin/campaigns'),
+  deleteAdminCampaign: (id) => request(`/admin/campaigns/${id}`, { method: 'DELETE' }),
 };
