@@ -1,9 +1,11 @@
+// src/components/ScenePanel.jsx (ПОЛНАЯ ПЕРЕРАБОТКА)
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
 import useConfirm from '../hooks/useConfirm';
 import usePrompt from '../hooks/usePrompt';
 
 export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, characters }) {
+  // ===== СОСТОЯНИЯ =====
   const [sceneType, setSceneType] = useState('local');
   const [backgrounds, setBackgrounds] = useState([]);
   const [showBgLibrary, setShowBgLibrary] = useState(false);
@@ -18,148 +20,147 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const [tokenSize, setTokenSize] = useState(36);
   const [zoom, setZoom] = useState(1);
   const [brightness, setBrightness] = useState(100);
-  const [showDrawings, setShowDrawings] = useState(true);
   const [selectedNote, setSelectedNote] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [snapshots, setSnapshots] = useState([]);
   const [showSnapshots, setShowSnapshots] = useState(false);
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
   const [portalEdit, setPortalEdit] = useState(null);
+  const [otherScenes, setOtherScenes] = useState([]); // порталы на других сценах
 
   // Панорама
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
-  const isPanning = useRef(false);
-  const panStart = useRef({ x: 0, y: 0 });
-  const panStartOffset = useRef({ x: 0, y: 0 });
+  const [pan, setPan] = useState({ x: 0, y: 0 });
 
-  const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const bgImageRef = useRef(null);
+  const canvasRef = useRef(null);
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
   const isDrawing = useRef(false);
   const draggedToken = useRef(null);
   const dragOffset = useRef({ x: 0, y: 0 });
   const drawingsRef = useRef([]);
   const portalsRef = useRef([]);
+  const currentPath = useRef([]);
 
   const { confirm, ConfirmModal } = useConfirm();
   const { prompt, PromptModal } = usePrompt();
 
-  // Загрузка сцены
+  // ===== ЗАГРУЗКА =====
   const loadScene = useCallback(async () => {
     try {
       const data = await api.getScenes(campaignId, sceneType);
-      if (data && data.length > 0) {
+      if (data?.length > 0) {
         const s = data[0];
-        const sceneTokens = s.tokens || [];
-        setTokens(sceneTokens);
+        setTokens(s.tokens || []);
         drawingsRef.current = s.drawings || [];
         portalsRef.current = s.portals || [];
-        if (s.background_url) {
-          setSelectedBg({ url: s.background_url, name: '' });
-        } else {
-          setSelectedBg(null);
-        }
-        const initialState = { tokens: sceneTokens, drawings: s.drawings || [], portals: s.portals || [] };
-        setHistory([initialState]);
-        setHistoryIndex(0);
-        redrawAll();
+        setSelectedBg(s.background_url ? { url: s.background_url, name: '' } : null);
       } else {
         setTokens([]);
         drawingsRef.current = [];
         portalsRef.current = [];
         setSelectedBg(null);
-        clearCanvas();
-        setHistory([{ tokens: [], drawings: [], portals: [] }]);
-        setHistoryIndex(0);
       }
-      setPanX(0);
-      setPanY(0);
+      setPan({ x: 0, y: 0 });
+      setZoom(1);
     } catch (e) { console.error(e); }
   }, [campaignId, sceneType]);
 
   const loadBackgrounds = async () => {
-    try { const bgs = await api.getBackgrounds(campaignId); setBackgrounds(bgs); } catch (e) { console.error(e); }
+    try { const bgs = await api.getBackgrounds(campaignId); setBackgrounds(bgs); } catch {}
   };
 
-  useEffect(() => { loadScene(); loadBackgrounds(); }, [sceneType, campaignId]);
+  const loadOtherScenes = async () => {
+    try {
+      const otherType = sceneType === 'local' ? 'global' : 'local';
+      const data = await api.getScenes(campaignId, otherType);
+      if (data?.length > 0) {
+        setOtherScenes(data[0].portals || []);
+      } else {
+        setOtherScenes([]);
+      }
+    } catch {}
+  };
 
-  // WebSocket
+  useEffect(() => { loadScene(); loadBackgrounds(); loadOtherScenes(); }, [sceneType, campaignId]);
+
+  // ===== WEBSOCKET =====
   useEffect(() => {
     if (!socketRef?.current) return;
     const socket = socketRef.current;
-    const h1 = (data) => { if (data.campaignId === campaignId && data.sceneType === sceneType) loadScene(); };
-    const h2 = (data) => {
-      if (data.campaignId === campaignId && data.sceneType === sceneType && data.tokens) setTokens(data.tokens);
+    const handlers = {
+      scene_updated: (d) => { if (d.campaignId === campaignId && d.sceneType === sceneType) loadScene(); },
+      scene_token_moved: (d) => { if (d.campaignId === campaignId && d.sceneType === sceneType) setTokens(d.tokens); },
+      scene_drawings: (d) => { if (d.campaignId === campaignId && d.sceneType === sceneType) { drawingsRef.current = d.drawings; redrawCanvas(); } },
+      scene_portals: (d) => { if (d.campaignId === campaignId && d.sceneType === sceneType) { portalsRef.current = d.portals; } },
     };
-    const h3 = (data) => {
-      if (data.campaignId === campaignId && data.sceneType === sceneType && data.drawings) {
-        drawingsRef.current = data.drawings;
-        redrawAll();
-      }
-    };
-    const h4 = (data) => {
-      if (data.campaignId === campaignId && data.sceneType === sceneType && data.portals) {
-        portalsRef.current = data.portals;
-      }
-    };
-    socket.on('scene_updated', h1);
-    socket.on('scene_token_moved', h2);
-    socket.on('scene_drawings', h3);
-    socket.on('scene_portals', h4);
-    return () => {
-      socket.off('scene_updated', h1);
-      socket.off('scene_token_moved', h2);
-      socket.off('scene_drawings', h3);
-      socket.off('scene_portals', h4);
-    };
+    Object.entries(handlers).forEach(([e, h]) => socket.on(e, h));
+    return () => Object.entries(handlers).forEach(([e, h]) => socket.off(e, h));
   }, [campaignId, sceneType, socketRef]);
 
-  // История
-  const pushHistory = (newState) => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newState);
-    if (newHistory.length > 50) newHistory.shift();
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+  // ===== СИНХРОНИЗАЦИЯ =====
+  const syncAll = () => {
+    if (!socketRef?.current) return;
+    socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
+    socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
+    socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: portalsRef.current });
   };
 
-  const undo = () => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      setHistoryIndex(newIndex);
-      const state = history[newIndex];
-      setTokens(state.tokens);
-      drawingsRef.current = state.drawings;
-      portalsRef.current = state.portals;
-      redrawAll();
-      syncAll();
-    }
+  // ===== ХОЛСТ =====
+  const getCanvasCoords = (clientX, clientY) => {
+    const container = containerRef.current;
+    const img = bgImageRef.current;
+    if (!container || !img) return { x: 0, y: 0 };
+    const rect = container.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - pan.x) / zoom,
+      y: (clientY - rect.top - pan.y) / zoom
+    };
   };
 
-  const redo = () => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      setHistoryIndex(newIndex);
-      const state = history[newIndex];
-      setTokens(state.tokens);
-      drawingsRef.current = state.drawings;
-      portalsRef.current = state.portals;
-      redrawAll();
-      syncAll();
-    }
+  const fitToScreen = () => {
+    const container = containerRef.current;
+    const img = bgImageRef.current;
+    if (!container || !img) return;
+    const fitZoom = Math.min(container.clientWidth / img.naturalWidth, container.clientHeight / img.naturalHeight, 1.5);
+    setZoom(fitZoom);
+    setPan({ x: 0, y: 0 });
   };
 
   useEffect(() => {
-    const handler = (e) => {
-      if (!isMaster) return;
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isMaster, historyIndex, history]);
+    if (selectedBg?.url) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => { bgImageRef.current = img; redrawCanvas(); fitToScreen(); };
+      img.onerror = () => setError('Не удалось загрузить изображение');
+      img.src = selectedBg.url;
+    } else {
+      bgImageRef.current = null;
+      clearCanvas();
+    }
+  }, [selectedBg]);
+
+  const redrawCanvas = () => {
+    const canvas = canvasRef.current;
+    const img = bgImageRef.current;
+    if (!canvas || !img) return;
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const d of drawingsRef.current) {
+      if (d.tool === 'pencil' && d.points?.length > 1) {
+        ctx.strokeStyle = d.color;
+        ctx.lineWidth = d.lineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(d.points[0].x, d.points[0].y);
+        for (let i = 1; i < d.points.length; i++) ctx.lineTo(d.points[i].x, d.points[i].y);
+        ctx.stroke();
+      }
+    }
+  };
 
   const clearCanvas = () => {
     if (canvasRef.current) {
@@ -168,342 +169,102 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
     }
   };
 
-  const redrawAll = () => {
-    if (!canvasRef.current || !bgImageRef.current) return;
-    const canvas = canvasRef.current;
-    const img = bgImageRef.current;
-    canvas.width = img.naturalWidth || img.width || 800;
-    canvas.height = img.naturalHeight || img.height || 600;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (showDrawings) {
-      for (const d of drawingsRef.current) drawShape(ctx, d);
-    }
-  };
-
-  const drawShape = (ctx, d) => {
-    if (d.tool === 'pencil' && d.points?.length > 0) {
-      ctx.strokeStyle = d.color || '#ff0000';
-      ctx.lineWidth = d.lineWidth || 3;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.beginPath();
-      ctx.moveTo(d.points[0].x, d.points[0].y);
-      for (let i = 1; i < d.points.length; i++) ctx.lineTo(d.points[i].x, d.points[i].y);
-      ctx.stroke();
-    }
-  };
-
-  const autoSaveScene = () => {
-    if (socketRef?.current) {
-      socketRef.current.emit('scene_update', { campaignId, sceneType, updates: {} });
-    }
-  };
-
-  const syncAll = () => {
-    if (socketRef?.current) {
-      socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
-      socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
-      socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: portalsRef.current });
-    }
-    autoSaveScene();
-  };
-
-  const syncTokens = (newTokens) => {
-    setTokens(newTokens);
-    const newState = { tokens: newTokens, drawings: drawingsRef.current, portals: portalsRef.current };
-    pushHistory(newState);
-    if (socketRef?.current) {
-      socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
-      socketRef.current.emit('scene_update', { campaignId, sceneType, updates: { tokens: newTokens } });
-    }
-  };
-
-  const syncDrawings = () => {
-    const newState = { tokens, drawings: drawingsRef.current, portals: portalsRef.current };
-    pushHistory(newState);
-    if (socketRef?.current) {
-      socketRef.current.emit('scene_drawings', { campaignId, sceneType, drawings: drawingsRef.current });
-      socketRef.current.emit('scene_update', { campaignId, sceneType, updates: { drawings: drawingsRef.current } });
-    }
-  };
-
-  const syncPortals = (newPortals) => {
-    portalsRef.current = newPortals;
-    const newState = { tokens, drawings: drawingsRef.current, portals: newPortals };
-    pushHistory(newState);
-    if (socketRef?.current) {
-      socketRef.current.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
-      socketRef.current.emit('scene_update', { campaignId, sceneType, updates: { portals: newPortals } });
-    }
-  };
-
-  // Снапшоты
-  const takeSnapshot = async () => {
-    const name = await prompt('Название снапшота:');
-    if (!name) return;
-    const snapshot = {
-      id: Date.now().toString(),
-      name,
-      tokens: JSON.parse(JSON.stringify(tokens)),
-      drawings: JSON.parse(JSON.stringify(drawingsRef.current)),
-      portals: JSON.parse(JSON.stringify(portalsRef.current)),
-    };
-    const newSnapshots = [...snapshots, snapshot];
-    setSnapshots(newSnapshots);
-    localStorage.setItem(`snapshots_${campaignId}_${sceneType}`, JSON.stringify(newSnapshots));
-  };
-
-  const loadSnapshot = async (snapshot) => {
-    const ok = await confirm(`Загрузить снапшот "${snapshot.name}"? Текущее состояние будет потеряно.`);
-    if (!ok) return;
-    setTokens(snapshot.tokens);
-    drawingsRef.current = snapshot.drawings;
-    portalsRef.current = snapshot.portals;
-    redrawAll();
-    const newState = { tokens: snapshot.tokens, drawings: snapshot.drawings, portals: snapshot.portals };
-    pushHistory(newState);
-    syncAll();
-  };
-
-  const deleteSnapshot = (id) => {
-    const newSnapshots = snapshots.filter(s => s.id !== id);
-    setSnapshots(newSnapshots);
-    localStorage.setItem(`snapshots_${campaignId}_${sceneType}`, JSON.stringify(newSnapshots));
-  };
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(`snapshots_${campaignId}_${sceneType}`);
-      if (saved) setSnapshots(JSON.parse(saved));
-    } catch (e) {}
-  }, [campaignId, sceneType]);
-
-  useEffect(() => {
-    if (!selectedBg?.url) { clearCanvas(); return; }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => { bgImageRef.current = img; redrawAll(); };
-    img.onerror = () => setError('Не удалось загрузить изображение');
-    img.src = selectedBg.url;
-  }, [selectedBg]);
-
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom(prev => Math.max(0.3, Math.min(3, prev + delta)));
-  };
-
-  const getCanvasPos = (e) => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return { x: 0, y: 0 };
-    const rect = container.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const mouseX = clientX - rect.left;
-    const mouseY = clientY - rect.top;
-    const scaleX = canvas.width / (rect.width / zoom);
-    const scaleY = canvas.height / (rect.height / zoom);
-    return { x: (mouseX - panX) * scaleX / zoom, y: (mouseY - panY) * scaleY / zoom };
-  };
-
-  const getTokenPos = (e) => getCanvasPos(e);
-
+  // ===== ПАНОРАМА =====
   const startPan = (e) => {
-    if (tool !== 'select' || !isMaster) return;
-    if (e.target.closest('[data-token]') || e.target.closest('[data-portal]')) return;
-    e.preventDefault();
+    if (tool !== 'select') return;
     isPanning.current = true;
-    panStart.current = { x: e.clientX, y: e.clientY };
-    panStartOffset.current = { x: panX, y: panY };
+    panStart.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
   };
 
   const movePan = (e) => {
     if (!isPanning.current) return;
-    e.preventDefault();
-    const dx = e.clientX - panStart.current.x;
-    const dy = e.clientY - panStart.current.y;
-    setPanX(panStartOffset.current.x + dx);
-    setPanY(panStartOffset.current.y + dy);
+    setPan({
+      x: panStart.current.px + (e.clientX - panStart.current.x),
+      y: panStart.current.py + (e.clientY - panStart.current.y)
+    });
   };
 
-  const endPan = () => {
-    isPanning.current = false;
-  };
+  const endPan = () => { isPanning.current = false; };
 
-  const currentPath = useRef([]);
-
+  // ===== РИСОВАНИЕ =====
   const startDraw = (e) => {
-    if (!isMaster || (tool !== 'pencil' && tool !== 'eraser')) return;
+    if (!isMaster || tool !== 'pencil') return;
     e.preventDefault();
-    const pos = getCanvasPos(e);
+    e.stopPropagation();
+    const pos = getCanvasCoords(e.clientX, e.clientY);
     isDrawing.current = true;
     currentPath.current = [{ x: pos.x, y: pos.y }];
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = tool === 'eraser' ? '#000000' : color;
-    ctx.lineWidth = tool === 'eraser' ? lineWidth * 4 : lineWidth;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
   };
 
   const moveDraw = (e) => {
-    if (!isMaster || !isDrawing.current || (tool !== 'pencil' && tool !== 'eraser')) return;
+    if (!isMaster || !isDrawing.current || tool !== 'pencil') return;
     e.preventDefault();
-    const pos = getCanvasPos(e);
+    const pos = getCanvasCoords(e.clientX, e.clientY);
     currentPath.current.push({ x: pos.x, y: pos.y });
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(currentPath.current[0].x, currentPath.current[0].y);
+    for (let i = 1; i < currentPath.current.length; i++) ctx.lineTo(currentPath.current[i].x, currentPath.current[i].y);
     ctx.stroke();
   };
 
   const endDraw = () => {
     if (!isMaster || !isDrawing.current) return;
     isDrawing.current = false;
-    if (currentPath.current.length > 0 && tool === 'pencil') {
-      drawingsRef.current = [...drawingsRef.current, { tool: 'pencil', color, lineWidth, points: currentPath.current }];
-      syncDrawings();
-    }
-    if (tool === 'eraser' && currentPath.current.length > 0) {
-      const eraserPath = currentPath.current;
-      drawingsRef.current = drawingsRef.current.filter(d => {
-        if (d.tool !== 'pencil' || !d.points?.length) return true;
-        for (const dp of d.points) {
-          for (const ep of eraserPath) {
-            if (Math.sqrt((dp.x - ep.x) ** 2 + (dp.y - ep.y) ** 2) < (lineWidth * 4 + (d.lineWidth || 3))) return false;
-          }
-        }
-        return true;
-      });
-      redrawAll();
-      syncDrawings();
+    if (currentPath.current.length > 1) {
+      drawingsRef.current = [...drawingsRef.current, { tool: 'pencil', color, lineWidth, points: [...currentPath.current] }];
+      syncAll();
     }
     currentPath.current = [];
-    if (canvasRef.current) canvasRef.current.getContext('2d').globalCompositeOperation = 'source-over';
   };
 
-  // Порталы
-  const addPortal = async (e) => {
-    if (!isMaster || tool !== 'portal') return;
+  // Ластик
+  const eraseAt = (e) => {
+    if (!isMaster || tool !== 'eraser') return;
     e.preventDefault();
-    const pos = getTokenPos(e);
-    const portalName = await prompt('Имя/ID портала:', 'Портал');
-    if (!portalName) return;
-    const targetScene = await prompt('Тип сцены для перехода (local/global):', sceneType === 'local' ? 'global' : 'local');
-    if (!targetScene || !['local', 'global'].includes(targetScene)) return;
-    const linkName = await prompt('Имя связанного портала (на целевой сцене):', portalName);
-    if (!linkName) return;
-    const newPortal = { id: `portal_${Date.now()}`, name: portalName, targetScene, linkName, x: pos.x, y: pos.y, visible: true };
-    const newPortals = [...portalsRef.current, newPortal];
-    syncPortals(newPortals);
-  };
-
-  const updatePortal = (portalId, updates) => {
-    const newPortals = portalsRef.current.map(p => p.id === portalId ? { ...p, ...updates } : p);
-    syncPortals(newPortals);
-    setPortalEdit(null);
-  };
-
-  const removePortal = (portalId) => {
-    const newPortals = portalsRef.current.filter(p => p.id !== portalId);
-    syncPortals(newPortals);
-    setPortalEdit(null);
-  };
-
-  const handlePortalClick = (portal) => {
-    if (!portal.targetScene || portal.targetScene === sceneType) return;
-    setSceneType(portal.targetScene);
-  };
-
-  // Заметки
-  const addNoteToken = async (e) => {
-    if (!isMaster || tool !== 'note') return;
-    e.preventDefault();
-    const pos = getTokenPos(e);
-    const text = await prompt('Текст заметки:');
-    if (text) {
-      const newToken = { id: `note_${Date.now()}`, type: 'note', label: '📝', color: '#ffcc00', x: pos.x, y: pos.y, note: text, hidden: false };
-      syncTokens([...tokens, newToken]);
+    e.stopPropagation();
+    const pos = getCanvasCoords(e.clientX, e.clientY);
+    const radius = lineWidth * 6;
+    const before = drawingsRef.current.length;
+    drawingsRef.current = drawingsRef.current.filter(d => {
+      if (d.tool !== 'pencil') return true;
+      return !d.points?.some(p => Math.sqrt((p.x - pos.x) ** 2 + (p.y - pos.y) ** 2) < radius);
+    });
+    if (drawingsRef.current.length !== before) {
+      redrawCanvas();
+      syncAll();
     }
   };
 
-  // Токены
+  // ===== ТОКЕНЫ =====
   const addToken = (type, refId, name, colorVal) => {
     if (!isMaster) return;
-    const canvas = canvasRef.current;
-    const w = canvas?.width || 800;
-    const h = canvas?.height || 600;
-    const newToken = { id: `${type}_${refId}_${Date.now()}`, type, ref_id: refId, label: (name || '?').substring(0, 2).toUpperCase(), color: colorVal, x: w * 0.3 + Math.random() * w * 0.4, y: h * 0.3 + Math.random() * h * 0.4, note: null, hidden: false };
-    syncTokens([...tokens, newToken]);
-  };
-
-  const toggleTokenVisibility = (tokenId) => {
-    const newTokens = tokens.map(t => t.id === tokenId ? { ...t, hidden: !t.hidden } : t);
-    syncTokens(newTokens);
-  };
-
-  const removeToken = (tokenId) => {
-    syncTokens(tokens.filter(t => t.id !== tokenId));
-  };
-
-  const handleTokenContext = (e, token) => {
-    if (!isMaster) return;
-    e.preventDefault();
-    setContextMenu({ type: 'token', token, x: e.clientX, y: e.clientY });
-  };
-
-  const handlePortalContext = (e, portal) => {
-    if (!isMaster) return;
-    e.preventDefault();
-    setContextMenu({ type: 'portal', portal, x: e.clientX, y: e.clientY });
-  };
-
-  const handleRollFromToken = async (token, skillName, modifier) => {
-    try {
-      const d20 = Math.floor(Math.random() * 20) + 1;
-      const sum = d20 + modifier;
-      if (socketRef?.current) {
-        socketRef.current.emit('dice_roll', {
-          campaignId,
-          userId: 'master',
-          username: `${token.label} (${token.type === 'npc' ? 'NPC' : 'Игрок'})`,
-          skillName,
-          formula: `d20 (${d20}) + ${modifier}`,
-          sum,
-          hidden: false,
-        });
-      }
-    } catch (e) { console.error(e); }
-    setContextMenu(null);
-  };
-
-  const getTokenSkills = (token) => {
-    if (token.type === 'npc') {
-      const npc = npcs?.find(n => n.id === token.ref_id);
-      return (npc?.skills || []).map(s => ({ name: s.name, modifier: s.modifier || 0 }));
-    }
-    if (token.type === 'character') {
-      const char = characters?.find(c => c.id === token.ref_id);
-      return (char?.skills || []).map(s => ({ name: s.name, modifier: s.totalModifier || s.modifier || 0 }));
-    }
-    return [];
+    const newToken = {
+      id: `${type}_${refId}_${Date.now()}`,
+      type, ref_id: refId,
+      label: (name || '?').substring(0, 2).toUpperCase(),
+      color: colorVal,
+      x: bgImageRef.current ? bgImageRef.current.naturalWidth * 0.5 : 400,
+      y: bgImageRef.current ? bgImageRef.current.naturalHeight * 0.5 : 300,
+      note: null, hidden: false
+    };
+    const newTokens = [...tokens, newToken];
+    setTokens(newTokens);
+    socketRef?.current?.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
   };
 
   const startTokenDrag = (e, tokenId) => {
     if (!isMaster || tool !== 'select') return;
-    if (e.button === 2) return;
     e.preventDefault();
     e.stopPropagation();
     draggedToken.current = tokenId;
-    const pos = getTokenPos(e);
+    const pos = getCanvasCoords(e.clientX, e.clientY);
     const token = tokens.find(t => t.id === tokenId);
     if (token) dragOffset.current = { x: pos.x - token.x, y: pos.y - token.y };
   };
@@ -511,76 +272,92 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
   const moveTokenDrag = (e) => {
     if (!draggedToken.current || !isMaster) return;
     e.preventDefault();
-    const pos = getTokenPos(e);
-    setTokens(prev => prev.map(t => t.id === draggedToken.current ? { ...t, x: pos.x - dragOffset.current.x, y: pos.y - dragOffset.current.y } : t));
+    const pos = getCanvasCoords(e.clientX, e.clientY);
+    setTokens(prev => prev.map(t => t.id === draggedToken.current
+      ? { ...t, x: pos.x - dragOffset.current.x, y: pos.y - dragOffset.current.y }
+      : t
+    ));
   };
 
   const endTokenDrag = () => {
-    if (draggedToken.current) {
-      const newState = { tokens, drawings: drawingsRef.current, portals: portalsRef.current };
-      pushHistory(newState);
-      if (socketRef?.current) {
-        socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
-        socketRef.current.emit('scene_update', { campaignId, sceneType, updates: { tokens } });
-      }
+    if (draggedToken.current && socketRef?.current) {
+      socketRef.current.emit('scene_token_move', { campaignId, sceneType, tokens });
     }
     draggedToken.current = null;
   };
+
+  // ===== ПОРТАЛЫ =====
+  const addPortal = () => {
+    if (!isMaster) return;
+    const newPortal = {
+      id: `portal_${Date.now()}`,
+      name: 'Портал',
+      targetScene: sceneType === 'local' ? 'global' : 'local',
+      linkName: '',
+      x: bgImageRef.current ? bgImageRef.current.naturalWidth * 0.5 : 400,
+      y: bgImageRef.current ? bgImageRef.current.naturalHeight * 0.5 : 300,
+      visible: true
+    };
+    const newPortals = [...portalsRef.current, newPortal];
+    portalsRef.current = newPortals;
+    socketRef?.current?.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
+  };
+
+  const updatePortal = (portalId, updates) => {
+    const newPortals = portalsRef.current.map(p => p.id === portalId ? { ...p, ...updates } : p);
+    portalsRef.current = newPortals;
+    socketRef?.current?.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
+    setPortalEdit(null);
+    setContextMenu(null);
+  };
+
+  const removePortal = (portalId) => {
+    const newPortals = portalsRef.current.filter(p => p.id !== portalId);
+    portalsRef.current = newPortals;
+    socketRef?.current?.emit('scene_portals', { campaignId, sceneType, portals: newPortals });
+    setPortalEdit(null);
+    setContextMenu(null);
+  };
+
+  const handlePortalClick = (portal) => {
+    if (!portal.targetScene || portal.targetScene === sceneType) return;
+    setSceneType(portal.targetScene);
+  };
+
+  // ===== ЗАМЕТКИ =====
+  const addNote = () => {
+    if (!isMaster) return;
+    const text = prompt('Текст заметки:');
+    if (!text) return;
+    const newToken = {
+      id: `note_${Date.now()}`,
+      type: 'note', label: '📝', color: '#ffcc00',
+      x: bgImageRef.current ? bgImageRef.current.naturalWidth * 0.5 : 400,
+      y: bgImageRef.current ? bgImageRef.current.naturalHeight * 0.5 : 300,
+      note: text, hidden: false
+    };
+    const newTokens = [...tokens, newToken];
+    setTokens(newTokens);
+    socketRef?.current?.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
+  };
+
+  // ===== СТИЛИ =====
+  const getElementStyle = (x, y) => ({
+    position: 'absolute',
+    left: x,
+    top: y,
+    transform: 'translate(-50%, -50%)',
+  });
 
   const availableTokens = [
     ...(characters || []).map(c => ({ type: 'character', id: c.id, name: c.name, color: '#33cc33' })),
     ...(npcs || []).filter(n => n.visibility === 'combat').map(n => ({ type: 'npc', id: n.id, name: n.name, color: '#cc3333' })),
   ];
 
-  const getScaledStyle = (x, y, size, extra = {}) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !containerRef.current) return { display: 'none' };
-    const rect = containerRef.current.getBoundingClientRect();
-    const scaleX = canvas.width / (rect.width / zoom);
-    const scaleY = canvas.height / (rect.height / zoom);
-    const scaledSize = size / zoom;
-    return {
-      position: 'absolute',
-      left: (x / scaleX * zoom) + panX - scaledSize / 2,
-      top: (y / scaleY * zoom) + panY - scaledSize / 2,
-      width: scaledSize,
-      height: scaledSize,
-      ...extra
-    };
-  };
-
-  const getTokenStyle = (token) => {
-    return getScaledStyle(token.x, token.y, tokenSize, {
-      borderRadius: token.type === 'note' ? '30%' : '50%',
-      backgroundColor: token.color,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontWeight: 'bold', color: token.type === 'note' ? '#000' : 'white',
-      fontSize: Math.max(8, (tokenSize / zoom) * 0.35),
-      border: `2px solid ${token.hidden ? '#ff0000' : 'white'}`,
-      opacity: token.hidden ? 0.4 : 1,
-      cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
-      zIndex: 30, userSelect: 'none', boxShadow: '0 0 4px rgba(0,0,0,0.5)', touchAction: 'none',
-    });
-  };
-
-  const getPortalStyle = (portal) => {
-    const size = 34;
-    return getScaledStyle(portal.x, portal.y, size, {
-      borderRadius: '50%',
-      background: 'radial-gradient(circle, rgba(100,100,255,0.8), rgba(50,50,150,0.4))',
-      border: '2px dashed #6666ff',
-      display: (portal.visible || isMaster) ? 'flex' : 'none',
-      alignItems: 'center', justifyContent: 'center',
-      color: 'white', fontSize: Math.max(6, (size / zoom) * 0.25),
-      cursor: 'pointer', zIndex: 25, userSelect: 'none',
-      opacity: portal.visible ? 0.8 : 0.3,
-      textAlign: 'center', overflow: 'hidden', wordBreak: 'break-all', lineHeight: 1.1,
-    });
-  };
-
+  // ===== РЕНДЕР =====
   return (
     <div className="flex flex-col h-full bg-wasteland-900">
-      {/* Панель инструментов */}
+      {/* ТУЛБАР — компактный */}
       <div className="flex items-center gap-1 p-1.5 bg-wasteland-800 border-b border-wasteland-600 flex-wrap">
         <select value={sceneType} onChange={e => setSceneType(e.target.value)} className="bg-wasteland-700 text-wasteland-100 text-xs rounded p-1 border border-wasteland-600">
           <option value="local">Локальная</option>
@@ -588,65 +365,34 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         </select>
         {isMaster && (
           <>
-            <button onClick={() => setShowBgLibrary(!showBgLibrary)} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300">🖼️</button>
+            <button onClick={() => setShowBgLibrary(!showBgLibrary)} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300" title="Фоны">🖼️</button>
             <select value={tool} onChange={e => setTool(e.target.value)} className="bg-wasteland-700 text-wasteland-100 text-xs rounded p-1 border border-wasteland-600">
               <option value="select">✋</option>
               <option value="pencil">✏️</option>
               <option value="eraser">🧹</option>
-              <option value="note">📝</option>
-              <option value="portal">🌀</option>
             </select>
-            {(tool === 'pencil' || tool === 'eraser') && (
-              <>
-                {tool === 'pencil' && <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-5 h-5 rounded cursor-pointer" />}
-                <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" />
-              </>
-            )}
-            <button onClick={() => setShowDrawings(!showDrawings)} className={`text-xs px-2 py-1 rounded ${showDrawings ? 'bg-wasteland-600 text-wasteland-300' : 'bg-wasteland-800 text-wasteland-500'}`}>
-              {showDrawings ? '📐' : '📐‍🗑️'}
-            </button>
-            <button onClick={undo} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300">↩</button>
-            <button onClick={redo} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300">↪</button>
-            <button onClick={takeSnapshot} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-1.5 py-0.5 rounded text-wasteland-300">📸</button>
-            <button onClick={() => setShowSnapshots(!showSnapshots)} className={`text-xs px-1.5 py-0.5 rounded ${showSnapshots ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-700 text-wasteland-300'}`}>
-              📋{snapshots.length > 0 ? `(${snapshots.length})` : ''}
-            </button>
+            {tool === 'pencil' && <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-5 h-5 rounded cursor-pointer" />}
+            {(tool === 'pencil' || tool === 'eraser') && <input type="range" min="1" max="10" value={lineWidth} onChange={e => setLineWidth(parseInt(e.target.value))} className="w-12" />}
+            <button onClick={addNote} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300" title="Заметка">📝</button>
+            <button onClick={addPortal} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300" title="Портал">🌀</button>
+            <button onClick={fitToScreen} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300" title="Вписать в экран">🔍</button>
             <span className="text-wasteland-500 text-xs">Размер:</span>
             <input type="range" min="16" max="72" value={tokenSize} onChange={e => setTokenSize(parseInt(e.target.value))} className="w-16" />
           </>
         )}
-        <span className="text-wasteland-500 text-xs">Зум:</span>
-        <input type="range" min="30" max="300" value={Math.round(zoom * 100)} onChange={e => setZoom(parseInt(e.target.value) / 100)} className="w-16" />
-        <span className="text-wasteland-400 text-xs">{Math.round(zoom * 100)}%</span>
         <span className="text-wasteland-500 text-xs">☀️</span>
         <input type="range" min="20" max="150" value={brightness} onChange={e => setBrightness(parseInt(e.target.value))} className="w-16" />
+        <span className="text-wasteland-400 text-xs">{Math.round(zoom * 100)}%</span>
         {error && <span className="text-accent-red text-xs ml-1">{error}</span>}
       </div>
 
-      {/* Снапшоты */}
-      {showSnapshots && (
-        <div className="bg-wasteland-800 p-2 border-b border-wasteland-600 max-h-32 overflow-y-auto">
-          <h4 className="text-wasteland-400 text-xs uppercase mb-1">Снапшоты</h4>
-          {snapshots.length === 0 && <p className="text-wasteland-500 text-xs">Нет снапшотов</p>}
-          {snapshots.map(s => (
-            <div key={s.id} className="flex justify-between items-center bg-wasteland-700 p-1 rounded mb-1 text-xs">
-              <span className="text-wasteland-300">{s.name}</span>
-              <div className="flex gap-1">
-                <button onClick={() => loadSnapshot(s)} className="text-accent-green hover:text-green-400">📥</button>
-                <button onClick={() => deleteSnapshot(s.id)} className="text-accent-red hover:text-red-400">🗑️</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Библиотека фонов */}
+      {/* БИБЛИОТЕКА ФОНОВ */}
       {showBgLibrary && isMaster && (
         <div className="bg-wasteland-800 p-2 border-b border-wasteland-600">
           <div className="flex flex-col sm:flex-row gap-1 mb-2">
-            <input placeholder="Название фона" value={bgNameInput} onChange={e => setBgNameInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
+            <input placeholder="Название" value={bgNameInput} onChange={e => setBgNameInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
             <label className="bg-accent-orange hover:bg-orange-500 text-wasteland-900 text-xs font-bold px-3 py-1.5 rounded cursor-pointer text-center">
-              📁 Выбрать файл
+              📁 Файл
               <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
@@ -659,15 +405,12 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
                     await api.uploadFile(base64, name, campaignId);
                     setBgNameInput('');
                     loadBackgrounds();
-                  } catch (err) {
-                    setError('Ошибка загрузки: ' + err.message);
-                  }
+                  } catch (err) { setError('Ошибка загрузки: ' + err.message); }
                 };
                 reader.readAsDataURL(file);
               }} />
             </label>
-            <span className="text-wasteland-500 text-xs self-center">или URL:</span>
-            <input placeholder="URL картинки" value={bgUrlInput} onChange={e => setBgUrlInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
+            <input placeholder="URL" value={bgUrlInput} onChange={e => setBgUrlInput(e.target.value)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs flex-1" />
             <button onClick={async () => {
               if (bgNameInput && bgUrlInput) {
                 await api.uploadBackground(campaignId, bgNameInput, bgUrlInput);
@@ -687,130 +430,148 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         </div>
       )}
 
-      {/* Холст */}
+      {/* ХОЛСТ */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden bg-wasteland-800 relative"
+        className="flex-1 overflow-hidden bg-wasteland-700 relative"
         style={{ touchAction: 'none' }}
-        onWheel={handleWheel}
+        onWheel={(e) => {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -0.1 : 0.1;
+          setZoom(prev => Math.max(0.2, Math.min(3, prev + delta)));
+        }}
         onMouseDown={(e) => {
-          if (e.button === 1 || (e.button === 0 && tool === 'select')) { startPan(e); return; }
-          if (tool === 'note') addNoteToken(e);
-          else if (tool === 'portal') addPortal(e);
-          else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
+          if (tool === 'select') startPan(e);
+          else if (tool === 'pencil') startDraw(e);
+          else if (tool === 'eraser') eraseAt(e);
         }}
         onMouseMove={(e) => {
-          if (isPanning.current) { movePan(e); return; }
-          moveDraw(e);
-          moveTokenDrag(e);
+          if (isPanning.current) movePan(e);
+          else if (isDrawing.current) moveDraw(e);
+          else if (draggedToken.current) moveTokenDrag(e);
         }}
-        onMouseUp={() => { endDraw(); endTokenDrag(); endPan(); }}
-        onMouseLeave={() => { endDraw(); endTokenDrag(); endPan(); }}
-        onTouchStart={(e) => {
-          if (e.touches.length === 2) { startPan(e); return; }
-          if (tool === 'note') addNoteToken(e);
-          else if (tool === 'portal') addPortal(e);
-          else if (tool === 'pencil' || tool === 'eraser') startDraw(e);
-        }}
-        onTouchMove={(e) => {
-          if (isPanning.current) { movePan(e); return; }
-          moveDraw(e);
-          moveTokenDrag(e);
-        }}
-        onTouchEnd={() => { endDraw(); endTokenDrag(); endPan(); }}
+        onMouseUp={() => { endPan(); endDraw(); endTokenDrag(); }}
+        onMouseLeave={() => { endPan(); endDraw(); endTokenDrag(); }}
+        onContextMenu={e => e.preventDefault()}
         onClick={() => { setContextMenu(null); setPortalEdit(null); }}
       >
-        <div
-          className="absolute top-0 left-0"
-          style={{
-            transform: `scale(${zoom}) translate(${panX / zoom}px, ${panY / zoom}px)`,
-            transformOrigin: '0 0',
-            filter: `brightness(${brightness}%)`
-          }}
-        >
+        <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0', filter: `brightness(${brightness}%)` }}>
           {selectedBg ? (
             <img ref={bgImageRef} src={selectedBg.url} alt="Фон" className="block max-w-none" draggable={false} />
           ) : (
-            <div className="flex items-center justify-center h-64 text-wasteland-500 text-sm" style={{ width: '400px' }}>
-              Выберите фон
-            </div>
+            <div className="flex items-center justify-center text-wasteland-500 text-sm" style={{ width: 400, height: 256 }}>Выберите фон</div>
           )}
-          <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: ['pencil', 'eraser'].includes(tool) ? 'auto' : 'none' }} />
+          <canvas ref={canvasRef} className="absolute top-0 left-0" style={{ pointerEvents: tool === 'pencil' ? 'auto' : 'none' }} />
 
-          {/* Порталы */}
+          {/* ПОРТАЛЫ */}
           {portalsRef.current.map(portal => (
-            <div key={portal.id} data-portal style={getPortalStyle(portal)}
+            <div
+              key={portal.id}
               onClick={(e) => { e.stopPropagation(); handlePortalClick(portal); }}
-              onContextMenu={(e) => handlePortalContext(e, portal)}
-              title={`${portal.name} → ${portal.targetScene}:${portal.linkName}`}>
-              {portal.name?.substring(0, 4)}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ type: 'portal', portal, x: e.clientX, y: e.clientY }); }}
+              style={{
+                ...getElementStyle(portal.x, portal.y),
+                width: 34, height: 34,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(100,100,255,0.8), rgba(50,50,150,0.4))',
+                border: '2px dashed #6666ff',
+                display: (portal.visible || isMaster) ? 'flex' : 'none',
+                alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontSize: 10, cursor: 'pointer', zIndex: 25,
+                opacity: portal.visible ? 0.9 : 0.3,
+              }}
+              title={portal.name ? `${portal.name} → ${portal.targetScene}` : `→ ${portal.targetScene}`}
+            >
+              {portal.name?.substring(0, 4) || '🌀'}
             </div>
           ))}
 
-          {/* Токены */}
+          {/* ТОКЕНЫ */}
           {tokens.filter(t => !t.hidden || isMaster).map(token => (
-            <div key={token.id} data-token
+            <div
+              key={token.id}
               onMouseDown={(e) => startTokenDrag(e, token.id)}
-              onTouchStart={(e) => startTokenDrag(e, token.id)}
-              onContextMenu={(e) => handleTokenContext(e, token)}
-              onClick={(e) => { e.stopPropagation(); if (token.type === 'note' && token.note) setSelectedNote(token); }}
-              style={getTokenStyle(token)}>
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isMaster && token.type !== 'note') {
+                  setContextMenu({ type: 'token', token, x: e.clientX, y: e.clientY });
+                }
+              }}
+              onClick={(e) => { e.stopPropagation(); if (token.type === 'note') setSelectedNote(token); }}
+              style={{
+                ...getElementStyle(token.x, token.y),
+                width: tokenSize, height: tokenSize,
+                borderRadius: token.type === 'note' ? '30%' : '50%',
+                backgroundColor: token.color,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 'bold', color: 'white', fontSize: tokenSize * 0.35,
+                border: `2px solid ${token.hidden ? '#ff0000' : 'white'}`,
+                opacity: token.hidden ? 0.4 : 1,
+                cursor: isMaster && tool === 'select' ? 'grab' : 'pointer',
+                zIndex: 30, userSelect: 'none',
+                boxShadow: '0 0 4px rgba(0,0,0,0.5)',
+              }}
+            >
               {token.label}
-              {token.hidden && isMaster && <span className="absolute -top-1 -right-1 text-xs">👁‍🗨</span>}
+              {token.hidden && isMaster && <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 10 }}>👁‍🗨</span>}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Нижняя панель токенов */}
+      {/* НИЖНЯЯ ПАНЕЛЬ ТОКЕНОВ */}
       {isMaster && (
         <div className="bg-wasteland-800 p-1.5 border-t border-wasteland-600 flex gap-1 overflow-x-auto">
-          <span className="text-wasteland-500 text-xs self-center">+</span>
           {availableTokens.map(t => (
-            <button key={`${t.type}_${t.id}`} onClick={() => addToken(t.type, t.id, t.name, t.color)} className="flex items-center gap-1 bg-wasteland-700 hover:bg-wasteland-600 rounded px-1.5 py-0.5 text-xs flex-shrink-0">
-              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }}></span>
+            <button key={`${t.type}_${t.id}`} onClick={() => addToken(t.type, t.id, t.name, t.color)}
+              className="flex items-center gap-1 bg-wasteland-700 hover:bg-wasteland-600 rounded px-1.5 py-0.5 text-xs flex-shrink-0">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.color }}></span>
               {t.name.substring(0, 8)}
             </button>
           ))}
-          <button onClick={() => syncTokens([])} className="text-xs bg-accent-red/20 hover:bg-accent-red/40 px-2 py-0.5 rounded text-accent-red flex-shrink-0">✕</button>
         </div>
       )}
 
-      {/* Контекстное меню */}
+      {/* КОНТЕКСТНОЕ МЕНЮ */}
       {contextMenu && (
-        <div className="fixed bg-wasteland-800 border border-wasteland-600 rounded shadow-lg z-50 py-1 min-w-[160px]"
+        <div
+          className="fixed bg-wasteland-800 border border-wasteland-600 rounded shadow-lg z-50 py-1 min-w-[160px]"
           style={{ left: Math.min(contextMenu.x, window.innerWidth - 170), top: Math.min(contextMenu.y, window.innerHeight - 200) }}
-          onClick={e => e.stopPropagation()}>
+          onClick={e => e.stopPropagation()}
+        >
           {contextMenu.type === 'token' && (
             <>
-              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">Токен: {contextMenu.token.label}</div>
-              <button onClick={() => { toggleTokenVisibility(contextMenu.token.id); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
+              <button onClick={() => {
+                const newTokens = tokens.map(t => t.id === contextMenu.token.id ? { ...t, hidden: !t.hidden } : t);
+                setTokens(newTokens);
+                socketRef?.current?.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
+                setContextMenu(null);
+              }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
                 {contextMenu.token.hidden ? '👁 Показать' : '👁‍🗨 Скрыть'}
               </button>
-              <div className="text-wasteland-500 text-xs px-2 py-0.5 border-t border-wasteland-600 mt-1">Броски:</div>
-              {getTokenSkills(contextMenu.token).map((skill, i) => (
-                <button key={i} onClick={() => handleRollFromToken(contextMenu.token, skill.name, skill.modifier)} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
-                  🎲 {skill.name} (+{skill.modifier})
-                </button>
-              ))}
-              <div className="border-t border-wasteland-600 mt-1 pt-1">
-                <button onClick={() => { removeToken(contextMenu.token.id); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red">
-                  🗑️ Удалить токен
-                </button>
-              </div>
+              <button onClick={() => {
+                setTokens(tokens.filter(t => t.id !== contextMenu.token.id));
+                socketRef?.current?.emit('scene_token_move', { campaignId, sceneType, tokens: tokens.filter(t => t.id !== contextMenu.token.id) });
+                setContextMenu(null);
+              }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red">
+                🗑️ Удалить
+              </button>
             </>
           )}
           {contextMenu.type === 'portal' && (
             <>
-              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">Портал: {contextMenu.portal.name}</div>
-              <div className="text-wasteland-500 text-xs px-2 py-0.5">→ {contextMenu.portal.targetScene}:{contextMenu.portal.linkName}</div>
-              <button onClick={() => { setPortalEdit({ ...contextMenu.portal }); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
+              <div className="text-wasteland-400 text-xs px-2 py-0.5 border-b border-wasteland-600">{contextMenu.portal.name || 'Портал'}</div>
+              <button onClick={() => {
+                setPortalEdit({ ...contextMenu.portal });
+                setContextMenu(null);
+              }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
                 ✏️ Редактировать
               </button>
-              <button onClick={() => { updatePortal(contextMenu.portal.id, { visible: !contextMenu.portal.visible }); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
+              <button onClick={() => updatePortal(contextMenu.portal.id, { visible: !contextMenu.portal.visible })} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-wasteland-300">
                 {contextMenu.portal.visible ? '👁‍🗨 Скрыть' : '👁 Показать'}
               </button>
-              <button onClick={() => { removePortal(contextMenu.portal.id); setContextMenu(null); }} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red">
+              <button onClick={() => removePortal(contextMenu.portal.id)} className="w-full text-left text-xs px-2 py-1 hover:bg-wasteland-700 text-accent-red">
                 🗑️ Удалить
               </button>
             </>
@@ -818,29 +579,26 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         </div>
       )}
 
-      {/* Редактирование портала */}
+      {/* РЕДАКТИРОВАНИЕ ПОРТАЛА */}
       {portalEdit && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setPortalEdit(null)}>
           <div className="bg-wasteland-800 border border-wasteland-600 rounded-lg p-4 max-w-xs w-full" onClick={e => e.stopPropagation()}>
-            <h3 className="text-accent-yellow font-bold mb-3">Редактировать портал</h3>
+            <h3 className="text-accent-yellow font-bold mb-3">Портал</h3>
             <div className="space-y-2">
-              <div>
-                <label className="text-wasteland-400 text-xs">Имя/ID</label>
-                <input value={portalEdit.name || ''} onChange={e => setPortalEdit({ ...portalEdit, name: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm" />
-              </div>
-              <div>
-                <label className="text-wasteland-400 text-xs">Тип целевой сцены</label>
-                <select value={portalEdit.targetScene || 'local'} onChange={e => setPortalEdit({ ...portalEdit, targetScene: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm">
-                  <option value="local">Локальная</option>
-                  <option value="global">Глобальная</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-wasteland-400 text-xs">Имя связанного портала</label>
-                <input value={portalEdit.linkName || ''} onChange={e => setPortalEdit({ ...portalEdit, linkName: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm" />
-              </div>
+              <input placeholder="Имя" value={portalEdit.name || ''} onChange={e => setPortalEdit({ ...portalEdit, name: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm" />
+              <select value={portalEdit.targetScene || ''} onChange={e => setPortalEdit({ ...portalEdit, targetScene: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm">
+                <option value="local">Локальная</option>
+                <option value="global">Глобальная</option>
+              </select>
+              <label className="text-wasteland-400 text-xs">Связанный портал (на целевой сцене):</label>
+              <select value={portalEdit.linkName || ''} onChange={e => setPortalEdit({ ...portalEdit, linkName: e.target.value })} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-sm">
+                <option value="">— Без связи —</option>
+                {portalEdit.targetScene !== sceneType && otherScenes.map(p => (
+                  <option key={p.id} value={p.name}>{p.name}</option>
+                ))}
+              </select>
               <div className="flex gap-2 pt-2">
-                <button onClick={() => updatePortal(portalEdit.id, { name: portalEdit.name, targetScene: portalEdit.targetScene, linkName: portalEdit.linkName })} className="flex-1 bg-accent-orange text-wasteland-900 font-bold py-1.5 rounded text-sm">Сохранить</button>
+                <button onClick={() => updatePortal(portalEdit.id, { name: portalEdit.name, targetScene: portalEdit.targetScene, linkName: portalEdit.linkName })} className="flex-1 bg-accent-orange text-wasteland-900 font-bold py-1.5 rounded text-sm">OK</button>
                 <button onClick={() => setPortalEdit(null)} className="bg-wasteland-600 text-wasteland-300 px-3 py-1.5 rounded text-sm">Отмена</button>
               </div>
             </div>
@@ -848,7 +606,7 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
         </div>
       )}
 
-      {/* Модалка заметки */}
+      {/* МОДАЛКА ЗАМЕТКИ */}
       {selectedNote && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setSelectedNote(null)}>
           <div className="bg-wasteland-800 border border-wasteland-600 rounded-lg p-4 max-w-sm w-full" onClick={e => e.stopPropagation()}>
@@ -858,9 +616,12 @@ export default function ScenePanel({ campaignId, isMaster, socketRef, npcs, char
             </div>
             <p className="text-wasteland-200 text-sm whitespace-pre-wrap">{selectedNote.note}</p>
             {isMaster && (
-              <button onClick={() => { removeToken(selectedNote.id); setSelectedNote(null); }} className="mt-3 text-xs bg-accent-red/20 hover:bg-accent-red/40 text-accent-red px-2 py-1 rounded">
-                Удалить
-              </button>
+              <button onClick={() => {
+                const newTokens = tokens.filter(t => t.id !== selectedNote.id);
+                setTokens(newTokens);
+                socketRef?.current?.emit('scene_token_move', { campaignId, sceneType, tokens: newTokens });
+                setSelectedNote(null);
+              }} className="mt-3 text-xs bg-accent-red/20 hover:bg-accent-red/40 text-accent-red px-2 py-1 rounded">Удалить</button>
             )}
           </div>
         </div>
