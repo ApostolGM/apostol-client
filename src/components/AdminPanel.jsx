@@ -60,6 +60,7 @@ export default function AdminPanel() {
       api.getAmmoTypes(), api.getCurrencies(), api.getAdminUsers(), api.getShopPresets(),
       api.getAdminBackgrounds(), api.getAdminSounds(), api.getAdminCampaigns().catch(() => []),
       api.getPlaylists().catch(() => []), api.getSubcategories().catch(() => [])
+      api.getCharacteristics().catch(() => [])
     ]);
     setItems(i); setPerks(p); setProfessions(prof); setSkills(s);
     setAmmoTypes(at); setCurrencies(cur); setUsers(usr); setShopPresets(sp);
@@ -301,6 +302,8 @@ export default function AdminPanel() {
     await api.deleteAdminSound(id);
     setGlobalSounds(prev => prev.filter(s => s.id !== id));
   };
+  
+  const [characteristics, setCharacteristics] = useState([]);
 
   // Batch operations
   const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -333,6 +336,7 @@ export default function AdminPanel() {
     { key: 'shop', label: 'Магазин' }, { key: 'playlists', label: 'Плейлисты' }, { key: 'subcategories', label: 'Подкатегории' },
     { key: 'campaigns', label: 'Кампании' }, { key: 'users', label: 'Пользователи' }, { key: 'backgrounds', label: 'Фоны' },
     { key: 'sounds', label: 'Звуки' },
+    { key: 'characteristics', label: 'Характеристики' },
   ];
 
   return (
@@ -358,6 +362,30 @@ export default function AdminPanel() {
             <input type="number" value={batchPrice} onChange={e => setBatchPrice(parseInt(e.target.value)||0)} className="bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs w-20" placeholder="Цена" />
             <button onClick={handleBatchPrice} disabled={!selectedIds.length} className="text-xs bg-accent-green text-wasteland-900 px-3 py-1.5 rounded disabled:opacity-50">Установить цену</button>
           </div>
+
+          {tab === 'characteristics' && (
+  <div>
+    <button onClick={() => openForm('characteristic')} className="text-xs bg-accent-orange text-wasteland-900 px-3 py-1.5 rounded mb-3">
+      {showForm && formType==='characteristic' ? 'Отмена' : '+ Характеристика'}
+    </button>
+    {showForm && formType === 'characteristic' && (
+      <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
+        <input placeholder="Название" value={newChar.name} onChange={e => setNewChar({...newChar, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+        <input placeholder="Кратко (СИЛ, ЛВК...)" value={newChar.short_name} onChange={e => setNewChar({...newChar, short_name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+        <input placeholder="Описание" value={newChar.description} onChange={e => setNewChar({...newChar, description: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+        <button onClick={handleCreateChar} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold">Создать</button>
+      </div>
+    )}
+    <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+      {characteristics.map(ch => (
+        <div key={ch.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
+          <span className="text-wasteland-200">{ch.short_name} — {ch.name}</span>
+          <button onClick={() => api.deleteCharacteristic(ch.id).then(load)} className="text-accent-red hover:text-red-400">🗑️</button>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
           {/* Filters */}
           <div className="flex gap-2 mb-3 flex-wrap">
