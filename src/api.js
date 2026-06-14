@@ -64,6 +64,10 @@ deletePlaylist: (id) => request(`/playlists/${id}`, { method: 'DELETE' }),
   me: () => request('/auth/me'),
 
   // Characteristics
+  getCharacteristics: () => request('/characteristics'),
+createCharacteristic: (data) => request('/characteristics', { method: 'POST', body: JSON.stringify(data) }),
+updateCharacteristic: (id, data) => request(`/characteristics/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+deleteCharacteristic: (id) => request(`/characteristics/${id}`, { method: 'DELETE' }),
 getCharacteristics: () => request('/characteristics'),
 createCharacteristic: (data) => request('/characteristics', { method: 'POST', body: JSON.stringify(data) }),
 updateCharacteristic: (id, data) => request(`/characteristics/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
