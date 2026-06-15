@@ -294,9 +294,7 @@ export default function Campaign({ user }) {
               <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`flex-shrink-0 px-3 py-2 text-xs md:text-sm md:px-4 ${activeTab === tab.key ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>{tab.label}</button>
             ))}
           </div>
-          {activeTab === 'loot' && isMaster && (
-  <div className="flex-1 overflow-y-auto p-3 min-h-0"><LootPanel campaignId={id} /></div>
-)}
+        
 
           {/* Чат */}
           {activeTab === 'chat' && (
@@ -364,6 +362,9 @@ export default function Campaign({ user }) {
           {activeTab === 'sounds' && (
             <div className="flex-1 overflow-y-auto p-3 min-h-0"><SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} /></div>
           )}
+          {activeTab === 'loot' && isMaster && (
+  <div className="flex-1 overflow-y-auto p-3 min-h-0"><LootPanel campaignId={id} /></div>
+)}
 
           {/* NPC */}
           {activeTab === 'npcs' && isMaster && (
