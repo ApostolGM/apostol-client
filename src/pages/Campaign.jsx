@@ -17,6 +17,7 @@ import CharacterCreator from '../components/CharacterCreator';
 import TimeCounter from '../components/TimeCounter';
 import MembersSidebar from '../components/MembersSidebar';
 import useConfirm from '../hooks/useConfirm';
+import LootPanel from '../components/LootPanel';
 
 const SOCKET_URL = 'https://apostol-api.onrender.com';
 
