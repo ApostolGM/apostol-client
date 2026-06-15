@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../api';
 import useConfirm from '../hooks/useConfirm';
 
-export default function MasterCharacterPanel({ campaignId }) {
+export default function MasterCharacterPanel({ campaignId, socketRef }) {
   const [characters, setCharacters] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [loading, setLoading] = useState(true);
@@ -126,6 +126,33 @@ export default function MasterCharacterPanel({ campaignId }) {
                   />
                 </div>
               </div>
+
+              {/* Рассрочка гибели */}
+              {char.perks?.some(p => p.name === 'Рассрочка гибели') && (
+                <div>
+                  <h4 className="text-wasteland-400 text-xs uppercase mb-2">💀 Рассрочка гибели</h4>
+                  <div className="flex items-center gap-3">
+                    <span className="text-wasteland-400 text-xs">Счётчик: {char.death_loan_count || 0}</span>
+                    {(char.death_loan_count || 0) > 0 && (
+                      <button
+                        onClick={() => {
+                          if (socketRef?.current) {
+                            socketRef.current.emit('death_loan_force_fail', {
+                              campaignId,
+                              characterId: char.id,
+                              count: char.death_loan_count,
+                            });
+                            load();
+                          }
+                        }}
+                        className="text-xs bg-accent-red/20 hover:bg-accent-red/40 text-accent-red px-3 py-1.5 rounded"
+                      >
+                        Активировать провал
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Навыки */}
               <div>
