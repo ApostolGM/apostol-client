@@ -122,6 +122,13 @@ export const api = {
   reloadWeapon: (slotId, ammoTypeId) =>
     request('/inventory/reload', { method: 'POST', body: JSON.stringify({ slot_id: slotId, ammo_type_id: ammoTypeId }) }),
 
+  // Loot
+getLootPools: (campaignId) => request(`/campaigns/${campaignId}/loot`),
+createLootPool: (campaignId, name, items) => request(`/campaigns/${campaignId}/loot`, { method: 'POST', body: JSON.stringify({ name, items }) }),
+updateLootPool: (id, data) => request(`/loot/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+deleteLootPool: (id) => request(`/loot/${id}`, { method: 'DELETE' }),
+giveLoot: (poolId, characterId) => request(`/loot/${poolId}/give/${characterId}`, { method: 'POST' }),
+
   // Master inventory
   updateInventorySlot: (slotId, data) => request(`/inventory/${slotId}`, { method: 'PUT', body: JSON.stringify(data) }),
   masterAddItem: (characterId, itemId, quantity, slotType) =>
