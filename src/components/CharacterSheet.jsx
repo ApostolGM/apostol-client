@@ -1,13 +1,15 @@
 // src/components/CharacterSheet.jsx
 import { useState, useEffect } from 'react';
 
-export default function CharacterSheet({ character, isMaster, onUpdate, onRollSkill }) {
+export default function CharacterSheet({ character, isMaster, onUpdate, onRollSkill, socketRef }) {
   const [editMode, setEditMode] = useState(false);
   const [params, setParams] = useState({
     food: character.food ?? 100,
     water: character.water ?? 100,
     stress: character.stress ?? 0,
   });
+  const [loanCount, setLoanCount] = useState(character?.death_loan_count || 0);
+  const [weightInfo, setWeightInfo] = useState(null);
 
   useEffect(() => {
     setParams({
@@ -15,7 +17,14 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
       water: character.water ?? 100,
       stress: character.stress ?? 0,
     });
-  }, [character.food, character.water, character.stress]);
+    setLoanCount(character?.death_loan_count || 0);
+  }, [character]);
+
+  useEffect(() => {
+    if (character?.id) {
+      api.getCharacterWeight(character.id).then(setWeightInfo).catch(() => {});
+    }
+  }, [character?.id]);
 
   const handleSlider = (field, value) => {
     setParams(prev => ({ ...prev, [field]: parseInt(value) }));
@@ -24,6 +33,15 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
   const saveParams = async () => {
     await onUpdate(params);
     setEditMode(false);
+  };
+
+  const requestDeathLoan = () => {
+    if (!socketRef?.current || !character) return;
+    socketRef.current.emit('death_loan_request', {
+      campaignId: character.campaign_id,
+      characterId: character.id,
+      characterName: character.name,
+    });
   };
 
   const sliderConfigs = [
@@ -43,6 +61,55 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
           </div>
         </div>
       </div>
+
+      {/* Вес */}
+      {weightInfo && (
+        <div className="bg-wasteland-800 p-3 rounded-lg border border-wasteland-600">
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-wasteland-400">Вес</span>
+            <span className={`font-bold ${
+              weightInfo.percent > 110 ? 'text-accent-red' :
+              weightInfo.percent > 85 ? 'text-accent-yellow' :
+              'text-wasteland-300'
+            }`}>
+              {weightInfo.totalWeight.toFixed(1)} / {weightInfo.maxWeight} кг ({weightInfo.percent}%)
+            </span>
+          </div>
+          <div className="w-full h-2 bg-wasteland-900 rounded overflow-hidden">
+            <div className={`h-full rounded transition-all ${
+              weightInfo.percent > 110 ? 'bg-accent-red' :
+              weightInfo.percent > 85 ? 'bg-accent-yellow' :
+              'bg-accent-green'
+            }`} style={{ width: `${Math.min(100, weightInfo.percent)}%` }} />
+          </div>
+          {weightInfo.penalty.label !== 'Норма' && (
+            <p className={`text-xs mt-1 ${
+              weightInfo.penalty.label.includes('Помеха') ? 'text-accent-red' : 'text-accent-yellow'
+            }`}>
+              ⚠️ {weightInfo.penalty.label}
+              {typeof weightInfo.penalty.penalty === 'number' && ` (${weightInfo.penalty.penalty}% к броскам)`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Рассрочка гибели */}
+      {character.perks?.some(p => p.name === 'Рассрочка гибели') && (
+        <div className="bg-wasteland-800 p-4 rounded-lg border border-accent-purple/30">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-wasteland-300 font-stylized">💀 Рассрочка гибели</h3>
+              <p className="text-wasteland-500 text-xs">Использовано: {loanCount}</p>
+            </div>
+            <button
+              onClick={requestDeathLoan}
+              className="text-xs bg-accent-purple/20 hover:bg-accent-purple/40 text-purple-400 px-3 py-1.5 rounded border border-accent-purple/30"
+            >
+              Запросить удачу
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Состояние */}
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
@@ -120,7 +187,7 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
               <span className="text-wasteland-500 ml-1">
                 ({perk.cost > 0 ? '+' : ''}{perk.cost})
               </span>
-              <p className="text-wasteland-400 text-xs">{perk.effect_text}</p>
+              <p className="text-wasteland-400 text-xs">{perk.description}</p>
             </div>
           ))}
         </div>
