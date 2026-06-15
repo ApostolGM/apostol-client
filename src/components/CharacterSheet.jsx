@@ -1,5 +1,6 @@
 // src/components/CharacterSheet.jsx
 import { useState, useEffect } from 'react';
+import { api } from '../api';
 
 export default function CharacterSheet({ character, isMaster, onUpdate, onRollSkill, socketRef }) {
   const [editMode, setEditMode] = useState(false);
