@@ -209,7 +209,8 @@ export default function Campaign({ user }) {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <CampaignTabs tabs={tabs} activeTab={activeTab} onSelect={setActiveTab} />
           <div className="flex-1 overflow-hidden min-h-0">
-            {activeTab === 'chat' && <ChatSection messages={messages} input={input} setInput={setInput} onSend={sendMessage} onKeyDown={handleKeyDown} />}
+            {activeTab === 'chat' && (
+             <ChatSection messages={messages} input={input} setInput={setInput} onSend={sendMessage} onKeyDown={handleKeyDown} />)}
             {activeTab === 'character' && (
               <div className="flex-1 overflow-y-auto p-3 h-full">
                 {isMaster ? <MasterCharacterPanel campaignId={id} socketRef={socketRef} /> : (
