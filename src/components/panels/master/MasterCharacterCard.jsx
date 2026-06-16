@@ -1,8 +1,6 @@
 // components/panels/master/MasterCharacterCard.jsx
 import { useState, useEffect } from 'react';
 import { characters as charsApi } from '../../../api/characters.js';
-import { inventory } from '../../../api/inventory.js';
-import { master } from '../../../api/master.js';
 import MasterInventorySection from './MasterInventorySection.jsx';
 import useConfirm from '../../../hooks/useConfirm.jsx';
 
