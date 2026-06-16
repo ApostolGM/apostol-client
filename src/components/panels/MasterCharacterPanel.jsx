@@ -35,6 +35,17 @@ export default function MasterCharacterPanel({ campaignId, socketRef }) {
 
   useEffect(() => { load(); }, [campaignId]);
 
+  // Реалтайм-обновление инвентаря
+  useEffect(() => {
+    if (!socketRef?.current) return;
+    const socket = socketRef.current;
+    const handler = (data) => {
+      if (data.character_id) load();
+    };
+    socket.on('inventory_updated', handler);
+    return () => socket.off('inventory_updated', handler);
+  }, [socketRef, campaignId]);
+
   const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   const handleParamChange = async (charId, field, value) => {
