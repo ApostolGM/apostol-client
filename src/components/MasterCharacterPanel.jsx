@@ -38,10 +38,9 @@ export default function MasterCharacterPanel({ campaignId, socketRef }) {
   };
 
   const handleParamChange = async (charId, field, value) => {
-  setCharacters(prev => prev.map(c => c.id === charId ? { ...c, [field]: value } : c));
-  await api.updateCharacterParams(charId, { [field]: value });
-  // Сокет уже отправляется сервером в ответе на updateCharacterParams
-};
+    setCharacters(prev => prev.map(c => c.id === charId ? { ...c, [field]: value } : c));
+    await api.updateCharacterParams(charId, { [field]: value });
+  };
 
   const handleAddSkill = async (charId, skillId, modifier) => {
     await api.addCharacterSkill(charId, skillId, modifier || 0);
@@ -218,7 +217,7 @@ export default function MasterCharacterPanel({ campaignId, socketRef }) {
               {/* Инвентарь */}
               <div>
                 <h4 className="text-wasteland-400 text-xs uppercase mb-2">Инвентарь</h4>
-                <MasterInventory charId={char.id} inventory={char.inventory || []} allItems={allItems} onRefresh={load} />
+                <MasterInventory charId={char.id} inventory={char.inventory || []} allItems={allItems} onRefresh={load} confirm={confirm} />
               </div>
             </div>
           )}
@@ -313,7 +312,7 @@ function SliderRow({ label, value, color, onChange }) {
   );
 }
 
-function MasterInventory({ charId, inventory, allItems, onRefresh }) {
+function MasterInventory({ charId, inventory, allItems, onRefresh, confirm }) {
   const [showAdd, setShowAdd] = useState(false);
   const [selectedItem, setSelectedItem] = useState('');
   const [quantity, setQuantity] = useState(1);
@@ -342,7 +341,7 @@ function MasterInventory({ charId, inventory, allItems, onRefresh }) {
   };
 
   const handleRemoveSlot = async (slotId) => {
-    if (!confirm('Удалить предмет?')) return;
+    if (!await confirm('Удалить предмет из инвентаря?')) return;
     await api.removeItem(slotId, 999);
     onRefresh();
   };
