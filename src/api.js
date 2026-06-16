@@ -55,7 +55,7 @@ export const api = {
   getCampaign: (id) => request(`/campaigns/${id}`),
   createCampaign: (title) => request('/campaigns', { method: 'POST', body: JSON.stringify({ title }) }),
   joinCampaign: (code) => request(`/campaigns/join/${code}`, { method: 'POST' }),
-  updateCampaignTime: (campaignId, data) => request(`/campaigns/${campaignId}/time`, { method: 'PUT', body: JSON.stringify(data) }),
+ updateCampaignTime: (campaignId, data) => request(`/campaigns/${campaignId}/time`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteMember: (campaignId, userId) => request(`/campaigns/${campaignId}/members/${userId}`, { method: 'DELETE' }),
 
   // Chat
