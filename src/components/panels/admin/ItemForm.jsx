@@ -22,7 +22,10 @@ export default function ItemForm({ initialData, ammoTypes, items, onSave, onCanc
         description: initialData.description || '', trade_price: initialData.trade_price || 0,
         is_global: initialData.is_global ?? true, is_container: initialData.is_container || false,
         container_slots: initialData.container_slots || 0,
-        container_items: initialData.container_items || [],
+        container_items: (initialData.container_items || []).map(ci => ({
+          item_id: ci.item_id || '',
+          quantity: ci.quantity || 1,
+        })),
         weapon_type: initialData.weapon_type || '', max_ammo: initialData.max_ammo || 0,
         is_heavy: initialData.is_heavy || false, ammo_type_id: initialData.ammo_type_id || '',
         mod_target: initialData.mod_target || '', weapon_mod_subtype: initialData.weapon_mod_subtype || ''
@@ -34,7 +37,28 @@ export default function ItemForm({ initialData, ammoTypes, items, onSave, onCanc
 
   const handleSubmit = () => {
     const payload = { ...form };
+
+    // Очищаем пустые UUID-поля
+    if (!payload.ammo_type_id) payload.ammo_type_id = null;
+    if (!payload.mod_target) payload.mod_target = null;
+    if (!payload.weapon_mod_subtype) payload.weapon_mod_subtype = null;
+    if (!payload.weapon_type) payload.weapon_type = null;
+
+    // Чистим container_items — убираем price_override, оставляем только item_id и quantity
+    if (payload.is_container && payload.container_items?.length > 0) {
+      payload.container_items = payload.container_items
+        .filter(ci => ci.item_id)
+        .map(ci => ({
+          item_id: ci.item_id,
+          quantity: ci.quantity || 1,
+        }));
+    } else {
+      payload.container_items = [];
+    }
+
+    // Оружие: подкатегория = тип оружия
     if (payload.slot === 'weapon') payload.subcategory = payload.weapon_type || 'melee';
+
     onSave(payload);
   };
 
@@ -66,7 +90,7 @@ export default function ItemForm({ initialData, ammoTypes, items, onSave, onCanc
 
       {form.slot === 'weapon' && form.weapon_type === 'ranged' && (
         <>
-          <select value={form.ammo_type_id} onChange={e => update('ammo_type_id', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+          <select value={form.ammo_type_id || ''} onChange={e => update('ammo_type_id', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
             <option value="">Тип патронов</option>
             {ammoTypes.map(at => <option key={at.id} value={at.id}>{at.name}</option>)}
           </select>
@@ -80,12 +104,12 @@ export default function ItemForm({ initialData, ammoTypes, items, onSave, onCanc
       )}
       {form.slot === 'mod' && (
         <>
-          <select value={form.mod_target} onChange={e => update('mod_target', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+          <select value={form.mod_target || ''} onChange={e => update('mod_target', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
             <option value="">На что устанавливается</option>
             <option value="weapon">Оружие</option><option value="armor">Броня</option><option value="exo">Экзоскелет</option><option value="any">Любой предмет</option>
           </select>
           {form.mod_target === 'weapon' && (
-            <select value={form.weapon_mod_subtype} onChange={e => update('weapon_mod_subtype', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+            <select value={form.weapon_mod_subtype || ''} onChange={e => update('weapon_mod_subtype', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
               <option value="">Подтип оружия</option>
               <option value="melee">Ближний бой</option><option value="ranged">Дальний бой</option><option value="thrown">Метательное</option><option value="any">Любое</option>
             </select>
@@ -93,7 +117,7 @@ export default function ItemForm({ initialData, ammoTypes, items, onSave, onCanc
         </>
       )}
       {form.slot === 'ammo' && (
-        <select value={form.ammo_type_id} onChange={e => update('ammo_type_id', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
+        <select value={form.ammo_type_id || ''} onChange={e => update('ammo_type_id', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
           <option value="">Тип патронов</option>
           {ammoTypes.map(at => <option key={at.id} value={at.id}>{at.name}</option>)}
         </select>
@@ -112,7 +136,7 @@ export default function ItemForm({ initialData, ammoTypes, items, onSave, onCanc
         <>
           <div><label className="text-wasteland-400 text-xs">Слотов: {form.container_slots}</label><input type="range" min="1" max="10" value={form.container_slots} onChange={e => update('container_slots', parseInt(e.target.value))} className="w-full" /></div>
           <label className="text-wasteland-400 text-xs block">Содержимое:</label>
-          <ItemListEditor items={form.container_items} allItems={items} onChange={(val) => update('container_items', val)} />
+          <ItemListEditor items={form.container_items} allItems={items} onChange={(val) => update('container_items', val)} showPrice={false} />
         </>
       )}
 
