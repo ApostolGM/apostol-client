@@ -254,16 +254,16 @@ export default function Campaign({ user }) {
     }
   };
 
-  const handleTimeChange = async (dateStr, hours, minutes) => {
-    setSaveStatus('saving');
-    try {
-      await api.updateCampaignTime(id, { game_time_date: dateStr, game_time_hours: hours, game_time_minutes: minutes });
-      setCampaign(prev => ({ ...prev, game_time_date: dateStr, game_time_hours: hours, game_time_minutes: minutes }));
-      setSaveStatus('saved');
-    } catch {
-      setSaveStatus('error');
-    }
-  };
+  const handleTimeChange = async (gameTime) => {
+  setSaveStatus('saving');
+  try {
+    await api.updateCampaignTime(id, { game_time: gameTime });
+    setCampaign(prev => ({ ...prev, game_time: gameTime }));
+    setSaveStatus('saved');
+  } catch {
+    setSaveStatus('error');
+  }
+};
 
   const handleKickMember = async (userId) => {
     await api.deleteMember(id, userId);
@@ -293,11 +293,8 @@ export default function Campaign({ user }) {
   ];
 
   const formatTime = () => {
-    const d = campaign.game_time_date || '2026-01-01';
-    const h = String(campaign.game_time_hours || 12).padStart(2, '0');
-    const m = String(campaign.game_time_minutes || 0).padStart(2, '0');
-    return `${d} ${h}:${m}`;
-  };
+  return campaign.game_time || '2026-01-01 12:00';
+};
 
   return (
     <div className="h-screen bg-wasteland-900 flex flex-col overflow-hidden">
@@ -315,7 +312,7 @@ export default function Campaign({ user }) {
           <span className="text-wasteland-500 text-xs hidden sm:inline">Код: {campaign.invite_code}</span>
           {isMaster ? (
             <div className="flex items-center gap-1">
-              <TimeCounter date={campaign.game_time_date || '2026-01-01'} hours={campaign.game_time_hours || 12} minutes={campaign.game_time_minutes || 0} onChange={handleTimeChange} />
+              <TimeCounter gameTime={campaign.game_time || '2026-01-01 12:00'} onChange={handleTimeChange} />
               {saveStatus === 'saving' && <span className="text-accent-yellow text-xs">⏳</span>}
               {saveStatus === 'error' && <span className="text-accent-red text-xs">⚠️</span>}
             </div>
