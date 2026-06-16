@@ -95,13 +95,9 @@ export default function MasterInventorySection({ charId, inventory: inv, allItem
       </button>
 
       {equipped.length > 0 && <p className="text-wasteland-500 text-xs mt-2">Экипировано:</p>}
-      {equipped.map(s => (
-        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onQuantityChange={handleQuantityChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
-      ))}
+      {equipped.map(s => <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onQuantityChange={handleQuantityChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />)}
       {backpack.length > 0 && <p className="text-wasteland-500 text-xs mt-2">Рюкзак:</p>}
-      {backpack.map(s => (
-        <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onQuantityChange={handleQuantityChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />
-      ))}
+      {backpack.map(s => <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onQuantityChange={handleQuantityChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />)}
     </div>
   );
 }
