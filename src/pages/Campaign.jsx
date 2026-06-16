@@ -100,9 +100,7 @@ export default function Campaign({ user }) {
       if (characterRef.current && data.character_id === characterRef.current.id) refreshCharacter();
     });
 
-    // Рассрочка гибели — мастер получает запрос
     socket.on('death_loan_requested', async (data) => {
-      console.log('Master received death_loan_requested:', data);
       if (!isMaster) return;
       const ok = await confirm(`Игрок "${data.characterName}" запрашивает Рассрочку гибели. Заменить бросок на удачу?`);
       if (ok) {
@@ -116,7 +114,6 @@ export default function Campaign({ user }) {
       }
     });
 
-    // Все получают уведомление
     socket.on('death_loan_approved', (data) => {
       addMessage({
         user: 'Система',
@@ -255,15 +252,15 @@ export default function Campaign({ user }) {
   };
 
   const handleTimeChange = async (gameTime) => {
-  setSaveStatus('saving');
-  try {
-    await api.updateCampaignTime(id, { game_time: gameTime });
-    setCampaign(prev => ({ ...prev, game_time: gameTime }));
-    setSaveStatus('saved');
-  } catch {
-    setSaveStatus('error');
-  }
-};
+    setSaveStatus('saving');
+    try {
+      await api.updateCampaignTime(id, { game_time: gameTime });
+      setCampaign(prev => ({ ...prev, game_time: gameTime }));
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    }
+  };
 
   const handleKickMember = async (userId) => {
     await api.deleteMember(id, userId);
@@ -293,8 +290,8 @@ export default function Campaign({ user }) {
   ];
 
   const formatTime = () => {
-  return campaign.game_time || '2026-01-01 12:00';
-};
+    return campaign.game_time || '2026-01-01 12:00';
+  };
 
   return (
     <div className="h-screen bg-wasteland-900 flex flex-col overflow-hidden">
@@ -378,55 +375,77 @@ export default function Campaign({ user }) {
 
           {/* Инвентарь */}
           {activeTab === 'inventory' && !isMaster && character && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><InventoryPanel character={character} onRefresh={refreshCharacter} socketRef={socketRef} /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <InventoryPanel character={character} onRefresh={refreshCharacter} socketRef={socketRef} />
+            </div>
           )}
           {activeTab === 'inventory' && !isMaster && !character && (
-            <div className="flex-1 overflow-y-auto p-3 text-center text-wasteland-400 mt-8 min-h-0">Сначала создайте персонажа</div>
+            <div className="flex-1 overflow-y-auto p-3 text-center text-wasteland-400 mt-8 min-h-0">
+              Сначала создайте персонажа
+            </div>
           )}
 
           {/* Сцена */}
           {activeTab === 'scene' && (
-            <div className="flex-1 overflow-hidden min-h-0<ScenePanel campaignId={id} isMaster={isMaster} /> /></div>
+            <div className="flex-1 overflow-hidden min-h-0">
+              <ScenePanel campaignId={id} isMaster={isMaster} />
+            </div>
           )}
 
           {/* Магазин */}
           {activeTab === 'shop' && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><ShopPanel character={character} onRefresh={refreshCharacter} /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <ShopPanel character={character} onRefresh={refreshCharacter} />
+            </div>
           )}
 
           {/* Соундпад */}
           {activeTab === 'sounds' && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} />
+            </div>
           )}
 
           {/* База */}
           {activeTab === 'base' && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><BasePanel campaignId={id} character={character} isMaster={isMaster} socketRef={socketRef} onRefresh={refreshCharacter} /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <BasePanel campaignId={id} character={character} isMaster={isMaster} socketRef={socketRef} onRefresh={refreshCharacter} />
+            </div>
           )}
 
           {/* Лут */}
           {activeTab === 'loot' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><LootPanel campaignId={id} /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <LootPanel campaignId={id} />
+            </div>
           )}
 
           {/* NPC */}
           {activeTab === 'npcs' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><NPCPanel campaignId={id} socketRef={socketRef} /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <NPCPanel campaignId={id} socketRef={socketRef} />
+            </div>
           )}
 
           {/* Заметки */}
           {activeTab === 'notes' && isMaster && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><MasterNotes campaignId={id} /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <MasterNotes campaignId={id} />
+            </div>
           )}
 
           {/* Хендауты */}
           {activeTab === 'handouts' && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><HandoutsPanel campaignId={id} isMaster={isMaster} /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <HandoutsPanel campaignId={id} isMaster={isMaster} />
+            </div>
           )}
 
           {/* Админка */}
           {activeTab === 'admin' && isAdmin && (
-            <div className="flex-1 overflow-y-auto p-3 min-h-0"><AdminPanel /></div>
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              <AdminPanel />
+            </div>
           )}
         </div>
 
