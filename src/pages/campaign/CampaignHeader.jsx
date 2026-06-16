@@ -1,5 +1,5 @@
-// components/campaign/CampaignHeader.jsx
-import TimeCounter from '../layout/TimeCounter.jsx';
+// pages/campaign/CampaignHeader.jsx
+import TimeCounter from '../../components/layout/TimeCounter.jsx';
 
 export default function CampaignHeader({ campaign, navigate, isMaster, hiddenMode, setHiddenMode, saveStatus, onTimeChange }) {
   return (
@@ -10,10 +10,7 @@ export default function CampaignHeader({ campaign, navigate, isMaster, hiddenMod
       </div>
       <div className="flex items-center gap-2">
         {isMaster && (
-          <button
-            onClick={() => setHiddenMode(!hiddenMode)}
-            className={`text-xs px-2 py-0.5 rounded ${hiddenMode ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}
-          >
+          <button onClick={() => setHiddenMode(!hiddenMode)} className={`text-xs px-2 py-0.5 rounded ${hiddenMode ? 'bg-accent-red text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>
             {hiddenMode ? '🔒' : '👁'}
           </button>
         )}
