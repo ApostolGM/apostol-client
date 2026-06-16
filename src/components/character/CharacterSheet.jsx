@@ -17,6 +17,7 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
   const [editMode, setEditMode] = useState(false);
   const [weightInfo, setWeightInfo] = useState(null);
 
+  // Слушаем character_updated
   useEffect(() => {
     if (!socketRef?.current) return;
     const socket = socketRef.current;
@@ -32,6 +33,20 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
     return () => socket.off('character_updated', handleUpdate);
   }, [socketRef, character?.id]);
 
+  // Слушаем inventory_updated — перезагружаем персонажа целиком
+  useEffect(() => {
+    if (!socketRef?.current || !character?.id) return;
+    const socket = socketRef.current;
+    const handleInventory = async (data) => {
+      if (data.character_id === character.id) {
+        const updated = await characters.get(character.id);
+        setChar(updated);
+      }
+    };
+    socket.on('inventory_updated', handleInventory);
+    return () => socket.off('inventory_updated', handleInventory);
+  }, [socketRef, character?.id]);
+
   useEffect(() => {
     setChar(character);
     setParams({ food: character.food ?? 100, water: character.water ?? 100, stress: character.stress ?? 0 });
@@ -39,7 +54,7 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
 
   useEffect(() => {
     if (char?.id) characters.getWeight(char.id).then(setWeightInfo).catch(() => {});
-  }, [char?.id]);
+  }, [char?.id, char?.inventory]);
 
   const handleSlider = (field, value) => setParams(prev => ({ ...prev, [field]: parseInt(value) }));
   const saveParams = async () => { await onUpdate(params); setEditMode(false); };
