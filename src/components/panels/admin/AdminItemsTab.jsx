@@ -26,8 +26,16 @@ export default function AdminItemsTab({ items, ammoTypes, subcategories, onRefre
   const closeForm = () => { setShowForm(false); setEditId(null); setEditData(null); };
 
   const handleSave = async (data) => {
-    if (editId) await admin.updateItem(editId, data);
-    else await admin.createItem(data);
+    const cleaned = { ...data };
+
+    // Очищаем пустые строки в UUID-полях
+    if (!cleaned.ammo_type_id) cleaned.ammo_type_id = null;
+    if (!cleaned.mod_target) cleaned.mod_target = null;
+    if (!cleaned.weapon_mod_subtype) cleaned.weapon_mod_subtype = null;
+    if (!cleaned.weapon_type) cleaned.weapon_type = null;
+
+    if (editId) await admin.updateItem(editId, cleaned);
+    else await admin.createItem(cleaned);
     closeForm();
     onRefresh();
   };
