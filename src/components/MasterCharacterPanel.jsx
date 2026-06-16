@@ -38,9 +38,10 @@ export default function MasterCharacterPanel({ campaignId, socketRef }) {
   };
 
   const handleParamChange = async (charId, field, value) => {
-    setCharacters(prev => prev.map(c => c.id === charId ? { ...c, [field]: value } : c));
-    await api.updateCharacterParams(charId, { [field]: value });
-  };
+  setCharacters(prev => prev.map(c => c.id === charId ? { ...c, [field]: value } : c));
+  await api.updateCharacterParams(charId, { [field]: value });
+  // Сокет уже отправляется сервером в ответе на updateCharacterParams
+};
 
   const handleAddSkill = async (charId, skillId, modifier) => {
     await api.addCharacterSkill(charId, skillId, modifier || 0);
