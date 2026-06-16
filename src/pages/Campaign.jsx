@@ -386,7 +386,7 @@ export default function Campaign({ user }) {
 
           {/* Сцена */}
           {activeTab === 'scene' && (
-            <div className="flex-1 overflow-hidden min-h-0"><ScenePanel campaignId={id} isMaster={isMaster} socketRef={socketRef} npcs={npcs} characters={allCharacters} /></div>
+            <div className="flex-1 overflow-hidden min-h-0<ScenePanel campaignId={id} isMaster={isMaster} /> /></div>
           )}
 
           {/* Магазин */}
