@@ -1,4 +1,4 @@
-// components/campaign/ChatSection.jsx
+// pages/campaign/ChatSection.jsx
 import { useRef, useEffect } from 'react';
 
 export default function ChatSection({ messages, input, setInput, onSend, onKeyDown }) {
