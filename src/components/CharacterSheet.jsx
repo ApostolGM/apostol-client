@@ -37,6 +37,7 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
   };
 
   const requestDeathLoan = () => {
+    console.log('Requesting death loan...', { characterId: character.id, characterName: character.name });
     if (!socketRef?.current || !character) return;
     socketRef.current.emit('death_loan_request', {
       campaignId: character.campaign_id,
@@ -142,10 +143,7 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
               onChange={e => handleSlider(field, e.target.value)}
               disabled={!isMaster && !editMode}
               className="w-full h-2 rounded cursor-pointer"
-              style={{
-                accentColor: color,
-                opacity: isMaster || editMode ? 1 : 0.7,
-              }}
+              style={{ accentColor: color, opacity: isMaster || editMode ? 1 : 0.7 }}
             />
           </div>
         ))}
@@ -164,7 +162,7 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
               >
                 <div className="flex justify-between items-center">
                   <span className="text-wasteland-200 text-sm">{skill.name}</span>
-                  <span className="text-sm font-bold text-accent-green">+{skill.totalModifier}%</span>
+                  <span className="text-sm font-bold text-accent-green">+{skill.totalModifier || 0}%</span>
                 </div>
               </button>
             ))}
