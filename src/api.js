@@ -91,6 +91,11 @@ export const api = {
   addCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills`, { method: 'POST', body: JSON.stringify({ skill_id: skillId, modifier }) }),
   updateCharacterSkill: (charId, skillId, modifier) => request(`/characters/${charId}/skills/${skillId}`, { method: 'PUT', body: JSON.stringify({ modifier }) }),
   deleteCharacterSkill: (charId, skillId) => request(`/characters/${charId}/skills/${skillId}`, { method: 'DELETE' }),
+  // Base inventory
+getBaseInventory: (campaignId) => request(`/campaigns/${campaignId}/base`),
+depositToBase: (campaignId, slotId, quantity) => request(`/campaigns/${campaignId}/base/deposit`, { method: 'POST', body: JSON.stringify({ slot_id: slotId, quantity }) }),
+withdrawFromBase: (campaignId, baseItemId, quantity) => request(`/campaigns/${campaignId}/base/withdraw`, { method: 'POST', body: JSON.stringify({ base_item_id: baseItemId, quantity }) }),
+setBaseAccess: (campaignId, baseAccess) => request(`/campaigns/${campaignId}/base/access`, { method: 'PUT', body: JSON.stringify({ base_access: baseAccess }) }),
 
   // Dice
   diceAuto: (characterId, skillName) => request('/dice/auto', { method: 'POST', body: JSON.stringify({ character_id: characterId, skill_name: skillName }) }),
