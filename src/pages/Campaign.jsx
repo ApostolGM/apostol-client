@@ -18,6 +18,7 @@ import TimeCounter from '../components/TimeCounter';
 import MembersSidebar from '../components/MembersSidebar';
 import useConfirm from '../hooks/useConfirm';
 import LootPanel from '../components/LootPanel';
+import BasePanel from '../components/BasePanel';
 
 const SOCKET_URL = 'https://apostol-api.onrender.com';
 
