@@ -1,6 +1,6 @@
 // components/panels/master/MasterCharacterCard.jsx
 import { useState, useEffect } from 'react';
-import { charsApi } from '../../../api/characters.js';
+import { characters as charsApi } from '../../../api/characters.js';
 import { inventory } from '../../../api/inventory.js';
 import { master } from '../../../api/master.js';
 import MasterInventorySection from './MasterInventorySection.jsx';
@@ -49,10 +49,8 @@ export default function MasterCharacterCard({ char, expanded, onToggle, onDelete
 
       {expanded && (
         <div className="p-3 border-t border-wasteland-600 space-y-4">
-          {/* Состояние */}
           <StatusSliders char={char} onParamChange={onParamChange} />
 
-          {/* Экономика */}
           <div>
             <h4 className="text-wasteland-400 text-xs uppercase mb-2">Экономика</h4>
             <div className="flex items-center gap-3">
@@ -61,7 +59,6 @@ export default function MasterCharacterCard({ char, expanded, onToggle, onDelete
             </div>
           </div>
 
-          {/* Рассрочка гибели */}
           {char.perks?.some(p => p.name === 'Рассрочка гибели') && (
             <div>
               <h4 className="text-wasteland-400 text-xs uppercase mb-2">💀 Рассрочка гибели</h4>
@@ -76,10 +73,8 @@ export default function MasterCharacterCard({ char, expanded, onToggle, onDelete
             </div>
           )}
 
-          {/* Навыки */}
           <SkillsEditor char={char} allSkills={allSkills} onAdd={handleAddSkill} onUpdate={handleUpdateSkill} onDelete={handleDeleteSkill} />
 
-          {/* Перки */}
           {char.perks?.length > 0 && (
             <div>
               <h4 className="text-wasteland-400 text-xs uppercase mb-1">Перки</h4>
@@ -95,7 +90,6 @@ export default function MasterCharacterCard({ char, expanded, onToggle, onDelete
             </div>
           )}
 
-          {/* Инвентарь */}
           <div>
             <h4 className="text-wasteland-400 text-xs uppercase mb-2">Инвентарь</h4>
             <MasterInventorySection charId={char.id} inventory={char.inventory || []} allItems={allItems} onRefresh={onRefresh} />
