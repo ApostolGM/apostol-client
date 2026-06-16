@@ -1,13 +1,13 @@
 // components/panels/MasterCharacterPanel.jsx
 import { useState, useEffect } from 'react';
-import { characters as charsApi } from '../../api/characters.js';
+import { characters } from '../../api/characters.js';
 import { professions } from '../../api/professions.js';
-import { items as itemsApi } from '../../api/items.js';
+import { items } from '../../api/items.js';
 import MasterCharacterCard from './master/MasterCharacterCard.jsx';
 import useConfirm from '../../hooks/useConfirm.jsx';
 
 export default function MasterCharacterPanel({ campaignId, socketRef }) {
-  const [characters, setCharacters] = useState([]);
+  const [list, setList] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -18,14 +18,14 @@ export default function MasterCharacterPanel({ campaignId, socketRef }) {
   const load = async () => {
     try {
       setError('');
-      const [chars, skills, items] = await Promise.all([
-        charsApi.getCampaignCharacters(campaignId),
+      const [chars, skills, itemsData] = await Promise.all([
+        characters.getCampaignCharacters(campaignId),
         professions.getSkills(),
-        itemsApi.getAll(),
+        items.getAll(),
       ]);
-      setCharacters(chars);
+      setList(chars);
       setAllSkills(skills || []);
-      setAllItems(items || []);
+      setAllItems(itemsData || []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -38,13 +38,13 @@ export default function MasterCharacterPanel({ campaignId, socketRef }) {
   const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   const handleParamChange = async (charId, field, value) => {
-    setCharacters(prev => prev.map(c => c.id === charId ? { ...c, [field]: value } : c));
-    await charsApi.updateParams(charId, { [field]: value });
+    setList(prev => prev.map(c => c.id === charId ? { ...c, [field]: value } : c));
+    await characters.updateParams(charId, { [field]: value });
   };
 
   const handleDeleteCharacter = async (char) => {
     if (!await confirm(`Удалить персонажа "${char.name}"?`)) return;
-    await charsApi.delete(char.id);
+    await characters.delete(char.id);
     load();
   };
 
@@ -54,9 +54,8 @@ export default function MasterCharacterPanel({ campaignId, socketRef }) {
   return (
     <div className="space-y-3">
       <h2 className="text-xl font-stylized text-accent-orange mb-4">Персонажи игроков</h2>
-      {characters.length === 0 && <p className="text-wasteland-500 text-center py-4">Нет персонажей</p>}
-
-      {characters.map(char => (
+      {list.length === 0 && <p className="text-wasteland-500 text-center py-4">Нет персонажей</p>}
+      {list.map(char => (
         <MasterCharacterCard
           key={char.id}
           char={char}
