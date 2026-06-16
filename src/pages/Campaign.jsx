@@ -88,8 +88,7 @@ export default function Campaign({ user }) {
       user: data.username,
       text: `${data.skillName ? `[${data.skillName}] ` : ''}${data.formula} = ${data.sum}`,
       time: new Date(data.time).toLocaleTimeString(),
-      isRoll: true,
-      hidden: data.hidden,
+      isRoll: true, hidden: data.hidden,
     }));
     socket.on('chat_message', (data) => addMessage({
       user: data.username, text: data.text,
@@ -208,34 +207,40 @@ export default function Campaign({ user }) {
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <CampaignTabs tabs={tabs} activeTab={activeTab} onSelect={setActiveTab} />
-          <div className="flex-1 overflow-hidden min-h-0">
-            {activeTab === 'chat' && (
-             <ChatSection messages={messages} input={input} setInput={setInput} onSend={sendMessage} onKeyDown={handleKeyDown} />)}
-            {activeTab === 'character' && (
-              <div className="flex-1 overflow-y-auto p-3 h-full">
-                {isMaster ? <MasterCharacterPanel campaignId={id} socketRef={socketRef} /> : (
-                  <>
-                    {!character && !showCreateChar && (
-                      <div className="text-center mt-8"><p className="text-wasteland-400 mb-4">У вас ещё нет персонажа</p><button onClick={() => setShowCreateChar(true)} className="bg-accent-orange text-wasteland-900 font-bold px-6 py-3 rounded">Создать персонажа</button></div>
-                    )}
-                    {showCreateChar && !character && <CharacterCreator professions={professionsList} perks={perks} campaignId={id} onCreated={(char) => { setCharacter(char); setShowCreateChar(false); loadCampaign(); }} onCancel={() => setShowCreateChar(false)} />}
-                    {character && <CharacterSheet character={character} isMaster={false} onUpdate={async (params) => { await characters.updateParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} socketRef={socketRef} />}
-                  </>
-                )}
-              </div>
-            )}
-            {activeTab === 'inventory' && !isMaster && character && <div className="flex-1 overflow-y-auto p-3 h-full"><InventoryPanel character={character} onRefresh={refreshCharacter} socketRef={socketRef} /></div>}
-            {activeTab === 'inventory' && !isMaster && !character && <div className="flex-1 overflow-y-auto p-3 h-full text-center text-wasteland-400 mt-8">Сначала создайте персонажа</div>}
-            {activeTab === 'scene' && <ScenePanel campaignId={id} isMaster={isMaster} />}
-            {activeTab === 'shop' && <div className="flex-1 overflow-y-auto p-3 h-full"><ShopPanel character={character} onRefresh={refreshCharacter} /></div>}
-            {activeTab === 'sounds' && <div className="flex-1 overflow-y-auto p-3 h-full"><SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} /></div>}
-            {activeTab === 'base' && <div className="flex-1 overflow-y-auto p-3 h-full"><BasePanel campaignId={id} character={character} isMaster={isMaster} socketRef={socketRef} onRefresh={refreshCharacter} /></div>}
-            {activeTab === 'loot' && isMaster && <div className="flex-1 overflow-y-auto p-3 h-full"><LootPanel campaignId={id} /></div>}
-            {activeTab === 'npcs' && isMaster && <div className="flex-1 overflow-y-auto p-3 h-full"><NPCPanel campaignId={id} socketRef={socketRef} /></div>}
-            {activeTab === 'notes' && isMaster && <div className="flex-1 overflow-y-auto p-3 h-full"><MasterNotes campaignId={id} /></div>}
-            {activeTab === 'handouts' && <div className="flex-1 overflow-y-auto p-3 h-full"><HandoutsPanel campaignId={id} isMaster={isMaster} /></div>}
-            {activeTab === 'admin' && isAdmin && <div className="flex-1 overflow-y-auto p-3 h-full"><AdminPanel /></div>}
-          </div>
+
+          {activeTab === 'chat' && (
+            <ChatSection messages={messages} input={input} setInput={setInput} onSend={sendMessage} onKeyDown={handleKeyDown} />
+          )}
+
+          {activeTab !== 'chat' && (
+            <div className="flex-1 overflow-y-auto p-3 min-h-0">
+              {activeTab === 'character' && (
+                isMaster ? <MasterCharacterPanel campaignId={id} socketRef={socketRef} /> : (
+                  !character && !showCreateChar ? (
+                    <div className="text-center mt-8">
+                      <p className="text-wasteland-400 mb-4">У вас ещё нет персонажа</p>
+                      <button onClick={() => setShowCreateChar(true)} className="bg-accent-orange text-wasteland-900 font-bold px-6 py-3 rounded">Создать персонажа</button>
+                    </div>
+                  ) : showCreateChar && !character ? (
+                    <CharacterCreator professions={professionsList} perks={perks} campaignId={id} onCreated={(char) => { setCharacter(char); setShowCreateChar(false); loadCampaign(); }} onCancel={() => setShowCreateChar(false)} />
+                  ) : (
+                    <CharacterSheet character={character} isMaster={false} onUpdate={async (params) => { await characters.updateParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} socketRef={socketRef} />
+                  )
+                )
+              )}
+              {activeTab === 'inventory' && !isMaster && character && <InventoryPanel character={character} onRefresh={refreshCharacter} socketRef={socketRef} />}
+              {activeTab === 'inventory' && !isMaster && !character && <div className="text-center text-wasteland-400 mt-8">Сначала создайте персонажа</div>}
+              {activeTab === 'scene' && <ScenePanel campaignId={id} isMaster={isMaster} />}
+              {activeTab === 'shop' && <ShopPanel character={character} onRefresh={refreshCharacter} />}
+              {activeTab === 'sounds' && <SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} />}
+              {activeTab === 'base' && <BasePanel campaignId={id} character={character} isMaster={isMaster} socketRef={socketRef} onRefresh={refreshCharacter} />}
+              {activeTab === 'loot' && isMaster && <LootPanel campaignId={id} />}
+              {activeTab === 'npcs' && isMaster && <NPCPanel campaignId={id} socketRef={socketRef} />}
+              {activeTab === 'notes' && isMaster && <MasterNotes campaignId={id} />}
+              {activeTab === 'handouts' && <HandoutsPanel campaignId={id} isMaster={isMaster} />}
+              {activeTab === 'admin' && isAdmin && <AdminPanel />}
+            </div>
+          )}
         </div>
         <MembersSidebar members={campaign.members} isMaster={isMaster} currentUserId={user.id} onKick={handleKickMember} />
       </div>
