@@ -1,3 +1,4 @@
+// src/components/BasePanel.jsx
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 
@@ -8,16 +9,18 @@ export default function BasePanel({ campaignId, character, isMaster, socketRef, 
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    const [base, camp] = await Promise.all([
-      api.getBaseInventory(campaignId),
-      api.getCampaign(campaignId)
-    ]);
-    setBaseItems(base);
-    setBaseAccess(camp?.base_access ?? true);
-    if (character) {
-      const ch = await api.getCharacter(character.id);
-      setInventory(ch?.inventory || []);
-    }
+    try {
+      const [base, camp] = await Promise.all([
+        api.getBaseInventory(campaignId).catch(() => []),
+        api.getCampaign(campaignId).catch(() => ({}))
+      ]);
+      setBaseItems(base);
+      setBaseAccess(camp?.base_access ?? true);
+      if (character?.id) {
+        const ch = await api.getCharacter(character.id).catch(() => null);
+        setInventory(ch?.inventory || []);
+      }
+    } catch (e) { console.error(e); }
     setLoading(false);
   };
 
@@ -60,7 +63,7 @@ export default function BasePanel({ campaignId, character, isMaster, socketRef, 
 
       {!baseAccess && (
         <div className="bg-accent-red/10 border border-accent-red/30 p-3 rounded text-accent-red text-sm text-center">
-          База недоступна. Вы в рейде.
+          🔒 База недоступна. Вы в рейде.
         </div>
       )}
 
@@ -69,14 +72,18 @@ export default function BasePanel({ campaignId, character, isMaster, socketRef, 
         <div>
           <h3 className="text-wasteland-400 text-xs uppercase mb-2">🎒 Инвентарь</h3>
           {character && baseAccess ? (
-            inventory.filter(s => s.slot_type !== 'container' && !s.parent_slot_id).map(slot => (
-              <div key={slot.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 mb-1 text-xs flex justify-between items-center">
-                <span className="text-wasteland-200">{slot.item?.name} ×{slot.quantity}</span>
-                <button onClick={() => handleDeposit(slot.id, 1)} className="text-accent-green text-xs">→ Сдать</button>
-              </div>
-            ))
+            inventory.filter(s => s.slot_type !== 'container' && !s.parent_slot_id).length === 0 ? (
+              <p className="text-wasteland-500 text-xs">Инвентарь пуст</p>
+            ) : (
+              inventory.filter(s => s.slot_type !== 'container' && !s.parent_slot_id).map(slot => (
+                <div key={slot.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 mb-1 text-xs flex justify-between items-center">
+                  <span className="text-wasteland-200">{slot.item?.name} ×{slot.quantity}</span>
+                  <button onClick={() => handleDeposit(slot.id, 1)} className="text-accent-green hover:text-green-400 text-xs">→ Сдать</button>
+                </div>
+              ))
+            )
           ) : (
-            <p className="text-wasteland-500 text-xs">Нет персонажа или база закрыта</p>
+            <p className="text-wasteland-500 text-xs">{!character ? 'Нет персонажа' : 'База закрыта'}</p>
           )}
         </div>
 
@@ -90,7 +97,7 @@ export default function BasePanel({ campaignId, character, isMaster, socketRef, 
               <div key={item.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 mb-1 text-xs flex justify-between items-center">
                 <span className="text-wasteland-200">{item.item?.name} ×{item.quantity}</span>
                 {character && baseAccess && (
-                  <button onClick={() => handleWithdraw(item.id, 1)} className="text-accent-orange text-xs">← Взять</button>
+                  <button onClick={() => handleWithdraw(item.id, 1)} className="text-accent-orange hover:text-orange-400 text-xs">← Взять</button>
                 )}
               </div>
             ))
