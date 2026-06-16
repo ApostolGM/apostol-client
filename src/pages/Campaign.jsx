@@ -1,4 +1,5 @@
 // pages/Campaign.jsx — контейнер
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
@@ -15,6 +16,19 @@ import CampaignTabs from '../components/campaign/CampaignTabs.jsx';
 import ChatSection from '../components/campaign/ChatSection.jsx';
 import MembersSidebar from '../components/layout/MembersSidebar.jsx';
 import useConfirm from '../hooks/useConfirm.jsx';
+import CharacterCreator from '../components/character/CharacterCreator.jsx';
+import CharacterSheet from '../components/character/CharacterSheet.jsx';
+import InventoryPanel from '../components/panels/InventoryPanel.jsx';
+import ScenePanel from '../components/panels/ScenePanel.jsx';
+import ShopPanel from '../components/panels/ShopPanel.jsx';
+import SoundPad from '../components/panels/SoundPad.jsx';
+import BasePanel from '../components/panels/BasePanel.jsx';
+import LootPanel from '../components/panels/LootPanel.jsx';
+import NPCPanel from '../components/panels/NPCPanel.jsx';
+import MasterCharacterPanel from '../components/panels/MasterCharacterPanel.jsx';
+import MasterNotes from '../components/panels/MasterNotes.jsx';
+import HandoutsPanel from '../components/panels/HandoutsPanel.jsx';
+import AdminPanel from '../components/panels/AdminPanel.jsx';
 
 const SOCKET_URL = 'https://apostol-api.onrender.com';
 
