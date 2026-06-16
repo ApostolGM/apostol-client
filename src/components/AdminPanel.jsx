@@ -6,8 +6,6 @@ import usePrompt from '../hooks/usePrompt';
 import SkillListEditor from './SkillListEditor';
 import ItemListEditor from './ItemListEditor';
 
-const STANDARD_TAGS = ['бой', 'выживание', 'социальное', 'наука/инженерия', 'торговля'];
-
 const ITEM_ICONS = ['🗡️','🔫','🪓','🏹','🛡️','🦺','🤖','💠','🥫','💧','💉','🔦','🪢','🔧','💎','⚙️','📦','🧪','📜','🔑'];
 
 export default function AdminPanel() {
@@ -34,19 +32,17 @@ export default function AdminPanel() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [batchPrice, setBatchPrice] = useState(0);
 
-  // Filters
   const [filterSlot, setFilterSlot] = useState('all');
   const [filterSubcategory, setFilterSubcategory] = useState('all');
 
-  // Form states
   const [newItem, setNewItem] = useState({
     name: '', slot: 'item', subcategory: '', icon: '', weight: 0, condition_percent: 100,
     description: '', trade_price: 0, is_global: true, is_container: false,
     container_slots: 0, container_items: []
   });
-  const [newPerk, setNewPerk] = useState({ name: '', type: 'positive', cost: 0, description: '', effect_modifiers: [], tags: [], is_global: true });
+  const [newPerk, setNewPerk] = useState({ name: '', type: 'positive', cost: 0, description: '', effect_modifiers: [], is_global: true });
   const [newProfession, setNewProfession] = useState({ name: '', description: '', starter_skills: [], is_global: true });
-  const [newSkill, setNewSkill] = useState({ name: '', characteristic_id: '', tags: [], is_global: true });
+  const [newSkill, setNewSkill] = useState({ name: '', characteristic_id: '', is_global: true });
   const [newAmmoType, setNewAmmoType] = useState({ name: '' });
   const [newCurrency, setNewCurrency] = useState({ name: '', icon: '💎' });
   const [newPreset, setNewPreset] = useState({ name: '', is_active: false, price_multiplier: 1.0, items: [] });
@@ -57,7 +53,6 @@ export default function AdminPanel() {
   const [uploadingSound, setUploadingSound] = useState(false);
 
   const { confirm, ConfirmModal } = useConfirm();
-  const { prompt, PromptModal } = usePrompt();
 
   const load = async () => {
     setLoading(true);
@@ -83,7 +78,6 @@ export default function AdminPanel() {
     return subcategories.filter(s => s.slot === slot);
   };
 
-  // Open form
   const openForm = (type, editObj = null) => {
     setFormType(type);
     setEditId(editObj?.id || null);
@@ -104,13 +98,13 @@ export default function AdminPanel() {
         }
         break;
       case 'perk':
-        setNewPerk(editObj ? { ...editObj, effect_modifiers: editObj.effect_modifiers || [], tags: editObj.tags || [] } : { name: '', type: 'positive', cost: 0, description: '', effect_modifiers: [], tags: [], is_global: true });
+        setNewPerk(editObj ? { ...editObj, effect_modifiers: editObj.effect_modifiers || [] } : { name: '', type: 'positive', cost: 0, description: '', effect_modifiers: [], is_global: true });
         break;
       case 'profession':
         setNewProfession(editObj ? { ...editObj, starter_skills: editObj.starter_skills || [] } : { name: '', description: '', starter_skills: [], is_global: true });
         break;
       case 'skill':
-        setNewSkill(editObj ? { ...editObj, tags: editObj.tags || [], characteristic_id: editObj.characteristic_id || '' } : { name: '', characteristic_id: '', tags: [], is_global: true });
+        setNewSkill(editObj ? { name: editObj.name || '', characteristic_id: editObj.characteristic_id || '' } : { name: '', characteristic_id: '', is_global: true });
         break;
       case 'ammo': setNewAmmoType({ name: '' }); break;
       case 'currency': setNewCurrency({ name: '', icon: '💎' }); break;
@@ -125,7 +119,6 @@ export default function AdminPanel() {
 
   // ===== SAVE / DELETE =====
 
-  // Items
   const handleSaveItem = async () => {
     const payload = { ...newItem };
     if (payload.slot === 'weapon') payload.subcategory = payload.weapon_type || 'melee';
@@ -147,7 +140,6 @@ export default function AdminPanel() {
     setItems(prev => prev.filter(i => i.id !== id));
   };
 
-  // Perks
   const handleSavePerk = async () => {
     try {
       if (editId) {
@@ -167,7 +159,6 @@ export default function AdminPanel() {
     setPerks(prev => prev.filter(p => p.id !== id));
   };
 
-  // Professions
   const handleSaveProfession = async () => {
     try {
       if (editId) {
@@ -187,15 +178,13 @@ export default function AdminPanel() {
     setProfessions(prev => prev.filter(p => p.id !== id));
   };
 
-  // Skills
   const handleSaveSkill = async () => {
     try {
-      const payload = { ...newSkill, tags: newSkill.tags.join(',') };
       if (editId) {
-        const updated = await api.updateAdminSkill(editId, payload);
+        const updated = await api.updateAdminSkill(editId, newSkill);
         setSkills(prev => prev.map(s => s.id === updated.id ? updated : s));
       } else {
-        const created = await api.post('/admin/skills', { ...payload, is_global: true });
+        const created = await api.post('/admin/skills', { ...newSkill, is_global: true });
         setSkills(prev => [created, ...prev]);
       }
       setShowForm(false);
@@ -208,7 +197,6 @@ export default function AdminPanel() {
     setSkills(prev => prev.filter(s => s.id !== id));
   };
 
-  // Ammo types
   const handleCreateAmmoType = async () => {
     if (!newAmmoType.name.trim()) return;
     const created = await api.createAmmoType(newAmmoType.name);
@@ -221,7 +209,6 @@ export default function AdminPanel() {
     setAmmoTypes(prev => prev.filter(a => a.id !== id));
   };
 
-  // Currencies
   const handleCreateCurrency = async () => {
     if (!newCurrency.name.trim()) return;
     try {
@@ -236,7 +223,6 @@ export default function AdminPanel() {
     setCurrencies(prev => prev.filter(c => c.id !== id));
   };
 
-  // Shop presets
   const handleSavePreset = async () => {
     try {
       if (editId) {
@@ -255,7 +241,6 @@ export default function AdminPanel() {
     setShopPresets(prev => prev.filter(p => p.id !== id));
   };
 
-  // Playlists
   const handleCreatePlaylist = async () => {
     if (!newPlaylistName.trim()) return;
     const created = await api.createPlaylist(newPlaylistName.trim());
@@ -268,7 +253,6 @@ export default function AdminPanel() {
     setPlaylists(prev => prev.filter(p => p.id !== id));
   };
 
-  // Subcategories
   const handleCreateSubcategory = async () => {
     if (!newSubcategory.name.trim()) return;
     const created = await api.createSubcategory(newSubcategory.slot, newSubcategory.name);
@@ -281,7 +265,6 @@ export default function AdminPanel() {
     setSubcategories(prev => prev.filter(s => s.id !== id));
   };
 
-  // Characteristics
   const handleCreateChar = async () => {
     if (!newChar.name.trim()) return;
     const created = await api.createCharacteristic(newChar);
@@ -295,7 +278,6 @@ export default function AdminPanel() {
     setCharacteristics(prev => prev.filter(c => c.id !== id));
   };
 
-  // Global sounds
   const handleUploadGlobalSound = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -318,7 +300,6 @@ export default function AdminPanel() {
     setGlobalSounds(prev => prev.filter(s => s.id !== id));
   };
 
-  // Users
   const handleToggleUserRole = async (user) => {
     const newRole = user.role === 'admin' ? 'player' : 'admin';
     const updated = await api.updateAdminUser(user.id, newRole);
@@ -330,21 +311,18 @@ export default function AdminPanel() {
     setUsers(prev => prev.filter(u => u.id !== id));
   };
 
-  // Campaigns
   const handleDeleteCampaign = async (campaign) => {
     if (!await confirm(`Удалить кампанию "${campaign.title}"?`)) return;
     await api.deleteAdminCampaign(campaign.id);
     setCampaigns(prev => prev.filter(c => c.id !== campaign.id));
   };
 
-  // Backgrounds
   const handleDeleteBackground = async (id) => {
     if (!await confirm('Удалить фон?')) return;
     await api.deleteAdminBackground(id);
     setGlobalBackgrounds(prev => prev.filter(b => b.id !== id));
   };
 
-  // Batch operations
   const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const handleBatchDelete = async () => {
     if (!selectedIds.length) return;
@@ -360,7 +338,6 @@ export default function AdminPanel() {
     setSelectedIds([]);
   };
 
-  // Filtering
   const filteredItems = items.filter(item => {
     if (filterSlot !== 'all' && item.slot !== filterSlot) return false;
     if (filterSubcategory !== 'all' && item.subcategory !== filterSubcategory) return false;
@@ -410,7 +387,6 @@ export default function AdminPanel() {
             <button onClick={handleBatchPrice} disabled={!selectedIds.length} className="text-xs bg-accent-green text-wasteland-900 px-3 py-1.5 rounded disabled:opacity-50">Установить цену</button>
           </div>
 
-          {/* Filters */}
           <div className="flex gap-2 mb-3 flex-wrap">
             <select value={filterSlot} onChange={e => { setFilterSlot(e.target.value); setFilterSubcategory('all'); }} className="bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-xs">
               <option value="all">Все категории</option>
@@ -428,7 +404,7 @@ export default function AdminPanel() {
             )}
           </div>
 
-          {/* Item form */}
+          {/* Форма предмета */}
           {showForm && formType === 'item' && (
             <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
               <h3 className="text-wasteland-300 text-sm font-bold">{editId ? 'Редактировать предмет' : 'Новый предмет'}</h3>
@@ -514,7 +490,6 @@ export default function AdminPanel() {
             </div>
           )}
 
-          {/* Item list */}
           <div className="space-y-1 max-h-[60vh] overflow-y-auto">
             {filteredItems.map(item => (
               <div key={item.id} className={`bg-wasteland-800 p-2 rounded border text-xs flex gap-2 ${selectedIds.includes(item.id) ? 'border-accent-orange' : 'border-wasteland-600'}`}>
@@ -608,20 +583,6 @@ export default function AdminPanel() {
                 <option value="">Характеристика</option>
                 {characteristics.map(ch => <option key={ch.id} value={ch.id}>{ch.short_name} — {ch.name}</option>)}
               </select>
-              <div>
-                <label className="text-wasteland-400 text-xs mb-1 block">Теги</label>
-                <div className="flex flex-wrap gap-2">
-                  {STANDARD_TAGS.map(tag => (
-                    <label key={tag} className="flex items-center gap-1 text-xs text-wasteland-300">
-                      <input type="checkbox" checked={newSkill.tags.includes(tag)} onChange={(e) => {
-                        if (e.target.checked) setNewSkill({...newSkill, tags: [...newSkill.tags, tag]});
-                        else setNewSkill({...newSkill, tags: newSkill.tags.filter(t => t !== tag)});
-                      }} />
-                      {tag}
-                    </label>
-                  ))}
-                </div>
-              </div>
               <button onClick={handleSaveSkill} disabled={!newSkill.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">{editId ? 'Сохранить' : 'Создать'}</button>
             </div>
           )}
@@ -871,7 +832,6 @@ export default function AdminPanel() {
       )}
 
       {ConfirmModal}
-      {PromptModal}
     </div>
   );
 }
