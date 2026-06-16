@@ -12,13 +12,13 @@ import HandoutsPanel from '../components/HandoutsPanel';
 import SoundPad from '../components/SoundPad';
 import AdminPanel from '../components/AdminPanel';
 import ShopPanel from '../components/ShopPanel';
+import LootPanel from '../components/LootPanel';
+import BasePanel from '../components/BasePanel';
 import CharacterSheet from '../components/CharacterSheet';
 import CharacterCreator from '../components/CharacterCreator';
 import TimeCounter from '../components/TimeCounter';
 import MembersSidebar from '../components/MembersSidebar';
 import useConfirm from '../hooks/useConfirm';
-import LootPanel from '../components/LootPanel';
-import BasePanel from '../components/BasePanel';
 
 const SOCKET_URL = 'https://apostol-api.onrender.com';
 
@@ -100,15 +100,53 @@ export default function Campaign({ user }) {
       if (characterRef.current && data.character_id === characterRef.current.id) refreshCharacter();
     });
 
+    // Рассрочка гибели — мастер получает запрос
+    socket.on('death_loan_requested', async (data) => {
+      console.log('Master received death_loan_requested:', data);
+      if (!isMaster) return;
+      const ok = await confirm(`Игрок "${data.characterName}" запрашивает Рассрочку гибели. Заменить бросок на удачу?`);
+      if (ok) {
+        const char = allCharacters.find(c => c.id === data.characterId);
+        socket.emit('death_loan_approve', {
+          campaignId: data.campaignId,
+          characterId: data.characterId,
+          count: char?.death_loan_count || 0,
+          rollResult: 20,
+        });
+      }
+    });
+
+    // Все получают уведомление
+    socket.on('death_loan_approved', (data) => {
+      addMessage({
+        user: 'Система',
+        text: '💀 Рассрочка гибели активирована! Бросок заменён на удачу.',
+        time: new Date().toLocaleTimeString(),
+      });
+      refreshCharacter();
+    });
+
+    socket.on('death_loan_forced', (data) => {
+      addMessage({
+        user: 'Система',
+        text: '💀 Мастер активировал провал по Рассрочке гибели! Следующий бросок будет критическим провалом.',
+        time: new Date().toLocaleTimeString(),
+      });
+      refreshCharacter();
+    });
+
     return () => {
       socket.off('character_updated');
       socket.off('dice_result');
       socket.off('chat_message');
       socket.off('inventory_updated');
+      socket.off('death_loan_requested');
+      socket.off('death_loan_approved');
+      socket.off('death_loan_forced');
       socket.emit('leave_campaign', { userId: user.id });
       socket.disconnect();
     };
-  }, [campaign]);
+  }, [campaign, isMaster, allCharacters]);
 
   const loadCampaign = async () => {
     try {
@@ -237,12 +275,12 @@ export default function Campaign({ user }) {
 
   const tabs = [
     { key: 'chat', label: 'Чат' },
-    { key: 'character', label: 'Персонаж' },
+    { key: 'character', label: 'Перс' },
     ...(!isMaster ? [{ key: 'inventory', label: 'Инв' }] : []),
-    { key: 'base', label: 'База' },
     { key: 'scene', label: 'Сцена' },
     { key: 'shop', label: 'Магазин' },
     { key: 'sounds', label: 'Звук' },
+    { key: 'base', label: 'База' },
     ...(isMaster ? [
       { key: 'loot', label: 'Лут' },
       { key: 'npcs', label: 'NPC' },
@@ -296,12 +334,6 @@ export default function Campaign({ user }) {
               <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`flex-shrink-0 px-3 py-2 text-xs md:text-sm md:px-4 ${activeTab === tab.key ? 'bg-wasteland-700 text-accent-orange border-b-2 border-accent-orange' : 'text-wasteland-400'}`}>{tab.label}</button>
             ))}
           </div>
-          {activeTab === 'base' && (
-  <div className="flex-1 overflow-y-auto p-3 min-h-0">
-    <BasePanel campaignId={id} character={character} isMaster={isMaster} socketRef={socketRef} onRefresh={refreshCharacter} />
-  </div>
-)}
-        
 
           {/* Чат */}
           {activeTab === 'chat' && (
@@ -327,7 +359,7 @@ export default function Campaign({ user }) {
           {activeTab === 'character' && (
             <div className="flex-1 overflow-y-auto p-3 min-h-0">
               {isMaster ? (
-                <MasterCharacterPanel campaignId={id} />
+                <MasterCharacterPanel campaignId={id} socketRef={socketRef} />
               ) : (
                 <>
                   {!character && !showCreateChar && (
@@ -340,7 +372,7 @@ export default function Campaign({ user }) {
                     <CharacterCreator professions={professions} perks={perks} campaignId={id} onCreated={(char) => { setCharacter(char); setShowCreateChar(false); loadCampaign(); }} onCancel={() => setShowCreateChar(false)} />
                   )}
                   {character && (
-                    <CharacterSheet character={character} isMaster={false} onUpdate={async (params) => { await api.updateCharacterParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} />
+                    <CharacterSheet character={character} isMaster={false} onUpdate={async (params) => { await api.updateCharacterParams(character.id, params); refreshCharacter(); }} onRollSkill={rollSkill} socketRef={socketRef} />
                   )}
                 </>
               )}
@@ -365,13 +397,20 @@ export default function Campaign({ user }) {
             <div className="flex-1 overflow-y-auto p-3 min-h-0"><ShopPanel character={character} onRefresh={refreshCharacter} /></div>
           )}
 
-          {/* Соундпад (для всех) */}
+          {/* Соундпад */}
           {activeTab === 'sounds' && (
             <div className="flex-1 overflow-y-auto p-3 min-h-0"><SoundPad campaignId={id} isMaster={isMaster} socketRef={socketRef} /></div>
           )}
+
+          {/* База */}
+          {activeTab === 'base' && (
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><BasePanel campaignId={id} character={character} isMaster={isMaster} socketRef={socketRef} onRefresh={refreshCharacter} /></div>
+          )}
+
+          {/* Лут */}
           {activeTab === 'loot' && isMaster && (
-  <div className="flex-1 overflow-y-auto p-3 min-h-0"><LootPanel campaignId={id} /></div>
-)}
+            <div className="flex-1 overflow-y-auto p-3 min-h-0"><LootPanel campaignId={id} /></div>
+          )}
 
           {/* NPC */}
           {activeTab === 'npcs' && isMaster && (
