@@ -4,7 +4,7 @@ import { admin } from '../../../api/admin.js';
 import ItemForm from './ItemForm.jsx';
 import useConfirm from '../../../hooks/useConfirm.jsx';
 
-const ITEM_SLOTS = ['weapon', 'armor', 'exo', 'mod', 'ammo', 'consumable', 'item', 'currency'];
+const ITEM_SLOTS = ['weapon', 'armor', 'exo', 'mod', 'ammo', 'consumable', 'item', 'currency', 'container'];
 
 export default function AdminItemsTab({ items, ammoTypes, subcategories, onRefresh }) {
   const [showForm, setShowForm] = useState(false);
@@ -29,16 +29,17 @@ export default function AdminItemsTab({ items, ammoTypes, subcategories, onRefre
     const cleaned = { ...data };
 
     // Очищаем пустые строки в UUID-полях
-    if (!cleaned.ammo_type_id) cleaned.ammo_type_id = null;
-    if (!cleaned.mod_target) cleaned.mod_target = null;
-    if (!cleaned.weapon_mod_subtype) cleaned.weapon_mod_subtype = null;
-    if (!cleaned.weapon_type) cleaned.weapon_type = null;
+     if (!cleaned.ammo_type_id) cleaned.ammo_type_id = null;
+  if (!cleaned.mod_target) cleaned.mod_target = null;
+  if (!cleaned.weapon_mod_subtype) cleaned.weapon_mod_subtype = null;
+  if (!cleaned.weapon_type) cleaned.weapon_type = null;
+  if (cleaned.slot !== 'container') cleaned.container_items = [];
 
-    if (editId) await admin.updateItem(editId, cleaned);
-    else await admin.createItem(cleaned);
-    closeForm();
-    onRefresh();
-  };
+  if (editId) await admin.updateItem(editId, cleaned);
+  else await admin.createItem(cleaned);
+  closeForm();
+  onRefresh();
+};
 
   const handleDelete = async (id) => {
     if (!await confirm('Удалить предмет?')) return;
