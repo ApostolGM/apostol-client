@@ -4,7 +4,7 @@ import { admin } from '../../../api/admin.js';
 import ItemForm from './ItemForm.jsx';
 import useConfirm from '../../../hooks/useConfirm.jsx';
 
-export default function AdminItemsTab({ items, ammoTypes, subcategories, itemSlots, onRefresh }) {
+export default function AdminItemsTab({ items, ammoTypes, subcategories, itemSlots, icons, onRefresh }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState(null);
@@ -23,9 +23,13 @@ export default function AdminItemsTab({ items, ammoTypes, subcategories, itemSlo
     if (!cleaned.ammo_type_id) cleaned.ammo_type_id = null;
     if (!cleaned.weapon_type) cleaned.weapon_type = null;
     if (!cleaned.mod_item_slot_id) cleaned.mod_item_slot_id = null;
-    if (cleaned.slot !== 'container' && cleaned.item_slot_id !== itemSlots.find(s => s.name === 'container')?.id) {
+    if (!cleaned.icon_id) cleaned.icon_id = null;
+
+    const containerSlotId = itemSlots.find(s => s.name === 'container')?.id;
+    if (cleaned.item_slot_id !== containerSlotId) {
       cleaned.container_items = [];
     }
+
     if (editId) await admin.updateItem(editId, cleaned);
     else await admin.createItem(cleaned);
     closeForm();
@@ -55,7 +59,8 @@ export default function AdminItemsTab({ items, ammoTypes, subcategories, itemSlo
     onRefresh();
   };
 
-  const getSlotName = (item) => item.item_slot?.name || item.slot;
+  const getSlotName = (item) => item.item_slot?.name || item.slot || '—';
+  const getIconUrl = (item) => item.icon_data?.url || null;
 
   const filteredItems = items.filter(item => {
     const slotName = getSlotName(item);
@@ -92,6 +97,7 @@ export default function AdminItemsTab({ items, ammoTypes, subcategories, itemSlo
           ammoTypes={ammoTypes}
           items={items}
           itemSlots={itemSlots}
+          icons={icons}
           onSave={handleSave}
           onCancel={closeForm}
         />
@@ -102,15 +108,20 @@ export default function AdminItemsTab({ items, ammoTypes, subcategories, itemSlo
           <div key={item.id} className={`bg-wasteland-800 p-2 rounded border text-xs flex gap-2 ${selectedIds.includes(item.id) ? 'border-accent-orange' : 'border-wasteland-600'}`}>
             <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} />
             <div className="flex-1 flex justify-between items-center">
-              <span className="text-wasteland-200">
-                {item.icon && <span className="mr-1">{item.icon}</span>}
-                {item.name}
-                <span className="text-wasteland-500"> ({getSlotName(item)}{item.subcategory ? '/'+item.subcategory : ''})</span>
-                <span className="text-accent-yellow text-xs ml-1">{item.trade_price}💎</span>
-              </span>
+              <div className="flex items-center gap-1.5">
+                {getIconUrl(item) && (
+                  <img src={getIconUrl(item)} alt="" className="w-5 h-5 object-contain rounded" />
+                )}
+                <span className="text-wasteland-200">
+                  {item.name}
+                  <span className="text-wasteland-500 ml-1">({getSlotName(item)}{item.subcategory ? '/'+item.subcategory : ''})</span>
+                  <span className="text-accent-yellow text-xs ml-1">{item.trade_price}◆</span>
+                  {item.is_dynamic && <span className="text-accent-green text-xs ml-1">↻</span>}
+                </span>
+              </div>
               <div className="flex gap-1">
-                <button onClick={() => openEdit(item)} className="text-wasteland-400 hover:text-wasteland-200">✏️</button>
-                <button onClick={() => handleDelete(item.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+                <button onClick={() => openEdit(item)} className="text-wasteland-400 hover:text-wasteland-200">✏</button>
+                <button onClick={() => handleDelete(item.id)} className="text-accent-red hover:text-red-400">✕</button>
               </div>
             </div>
           </div>
