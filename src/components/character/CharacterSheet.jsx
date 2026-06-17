@@ -9,65 +9,50 @@ import PerksSection from './PerksSection.jsx';
 
 export default function CharacterSheet({ character, isMaster, onUpdate, onRollSkill, socketRef }) {
   const [char, setChar] = useState(character);
-  const [params, setParams] = useState({
-    food: character.food ?? 100,
-    water: character.water ?? 100,
-    stress: character.stress ?? 0,
-  });
   const [editMode, setEditMode] = useState(false);
   const [weightInfo, setWeightInfo] = useState(null);
 
-  // Слушаем character_updated
   useEffect(() => {
     if (!socketRef?.current) return;
     const socket = socketRef.current;
     const handleUpdate = (data) => {
       if (data.character_id === character?.id) {
         setChar(prev => ({ ...prev, ...data.updates }));
-        if (data.updates.food !== undefined) setParams(p => ({ ...p, food: data.updates.food }));
-        if (data.updates.water !== undefined) setParams(p => ({ ...p, water: data.updates.water }));
-        if (data.updates.stress !== undefined) setParams(p => ({ ...p, stress: data.updates.stress }));
       }
     };
     socket.on('character_updated', handleUpdate);
     return () => socket.off('character_updated', handleUpdate);
   }, [socketRef, character?.id]);
 
-  // Слушаем inventory_updated — перезагружаем персонажа целиком
   useEffect(() => {
     if (!socketRef?.current || !character?.id) return;
     const socket = socketRef.current;
-    const handleInventory = async (data) => {
+    const handler = async (data) => {
       if (data.character_id === character.id) {
         const updated = await characters.get(character.id);
         setChar(updated);
       }
     };
-    socket.on('inventory_updated', handleInventory);
-    return () => socket.off('inventory_updated', handleInventory);
+    socket.on('inventory_updated', handler);
+    return () => socket.off('inventory_updated', handler);
   }, [socketRef, character?.id]);
 
-  useEffect(() => {
-    setChar(character);
-    setParams({ food: character.food ?? 100, water: character.water ?? 100, stress: character.stress ?? 0 });
-  }, [character]);
+  useEffect(() => { setChar(character); }, [character]);
 
   useEffect(() => {
     if (char?.id) characters.getWeight(char.id).then(setWeightInfo).catch(() => {});
   }, [char?.id, char?.inventory]);
 
-  const handleSlider = (field, value) => setParams(prev => ({ ...prev, [field]: parseInt(value) }));
-  const saveParams = async () => { await onUpdate(params); setEditMode(false); };
+  const handleSave = async (statuses) => {
+    await onUpdate({ statuses });
+    setEditMode(false);
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-xl font-stylized text-wasteland-100">{char.name}</h2>
-            <p className="text-accent-orange">{char.profession?.name}</p>
-          </div>
-        </div>
+        <h2 className="text-xl font-stylized text-wasteland-100">{char.name}</h2>
+        <p className="text-accent-orange">{char.profession?.name}</p>
       </div>
 
       {weightInfo && <WeightBar weightInfo={weightInfo} />}
@@ -77,11 +62,10 @@ export default function CharacterSheet({ character, isMaster, onUpdate, onRollSk
       )}
 
       <StatusSliders
-        params={params}
+        statuses={char.statuses || []}
         editMode={editMode}
         isMaster={isMaster}
-        onSliderChange={handleSlider}
-        onSave={saveParams}
+        onSave={handleSave}
         onEditToggle={() => setEditMode(!editMode)}
       />
 
