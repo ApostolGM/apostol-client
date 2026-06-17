@@ -2,8 +2,7 @@
 import { request } from './index.js';
 
 export const characters = {
-  create: (data) =>
-    request('/characters', { method: 'POST', body: JSON.stringify(data) }),
+  create: (data) => request('/characters', { method: 'POST', body: JSON.stringify(data) }),
   get: (id) => request(`/characters/${id}`),
   updateParams: (id, params) =>
     request(`/characters/${id}/params`, { method: 'PUT', body: JSON.stringify(params) }),
@@ -15,6 +14,6 @@ export const characters = {
     request(`/characters/${charId}/skills/${skillId}`, { method: 'PUT', body: JSON.stringify({ modifier }) }),
   deleteSkill: (charId, skillId) =>
     request(`/characters/${charId}/skills/${skillId}`, { method: 'DELETE' }),
-  getCampaignCharacters: (campaignId) =>
-    request(`/campaigns/${campaignId}/characters`),
+  getCampaignCharacters: (campaignId) => request(`/campaigns/${campaignId}/characters`),
+  getStatuses: () => request('/character-statuses/global'),
 };
