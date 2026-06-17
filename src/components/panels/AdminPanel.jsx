@@ -23,6 +23,7 @@ import AdminPlaylistsTab from './admin/AdminPlaylistsTab.jsx';
 import AdminSubcategoriesTab from './admin/AdminSubcategoriesTab.jsx';
 import AdminSoundsTab from './admin/AdminSoundsTab.jsx';
 import AdminCraftTab from './admin/AdminCraftTab.jsx';
+import AdminIconsTab from './admin/AdminIconsTab.jsx';
 import AdminCampaignsTab from './admin/AdminCampaignsTab.jsx';
 import AdminUsersTab from './admin/AdminUsersTab.jsx';
 import AdminBackgroundsTab from './admin/AdminBackgroundsTab.jsx';
@@ -49,12 +50,13 @@ export default function AdminPanel() {
   const [characterStatuses, setCharacterStatuses] = useState([]);
   const [craftStations, setCraftStations] = useState([]);
   const [craftRecipes, setCraftRecipes] = useState([]);
+  const [icons, setIcons] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const loadAll = async () => {
     setLoading(true);
     const [
-      i, p, prof, s, sl, islots, icells, at, cur, usr, sp, bg, sd, camp, pl, sub, chars, cstat, cstation, crecipe
+      i, p, prof, s, sl, islots, icells, at, cur, usr, sp, bg, sd, camp, pl, sub, chars, cstat, cstation, crecipe, ic
     ] = await Promise.all([
       admin.getItems(), admin.getPerks(), admin.getProfessions(), admin.getSkills(),
       admin.getSkillLinks().catch(() => []), admin.getItemSlots().catch(() => []),
@@ -65,6 +67,7 @@ export default function AdminPanel() {
       characteristics.getAll().catch(() => []),
       admin.getCharacterStatuses().catch(() => []),
       admin.getCraftStations().catch(() => []), admin.getCraftRecipes().catch(() => []),
+      admin.getIcons().catch(() => []),
     ]);
     setItems(i); setPerks(p); setProfessions(prof); setSkills(s);
     setSkillLinks(sl); setItemSlots(islots); setInventoryCells(icells);
@@ -73,6 +76,7 @@ export default function AdminPanel() {
     setCampaignsList(camp); setPlaylistsList(pl); setSubcategoriesList(sub);
     setCharacteristicsList(chars); setCharacterStatuses(cstat);
     setCraftStations(cstation); setCraftRecipes(crecipe);
+    setIcons(ic);
     setLoading(false);
   };
 
@@ -87,6 +91,7 @@ export default function AdminPanel() {
     { key: 'items', label: 'Предметы' },
     { key: 'item-slots', label: 'Слоты' },
     { key: 'inventory-cells', label: 'Ячейки' },
+    { key: 'icons', label: 'Иконки' },
     { key: 'perks', label: 'Перки' },
     { key: 'professions', label: 'Профессии' },
     { key: 'skills', label: 'Навыки' },
@@ -119,9 +124,10 @@ export default function AdminPanel() {
         ))}
       </div>
 
-      {tab === 'items' && <AdminItemsTab items={items} ammoTypes={ammoTypes} subcategories={subcategoriesList} itemSlots={itemSlots} onRefresh={refreshItems} />}
+      {tab === 'items' && <AdminItemsTab items={items} ammoTypes={ammoTypes} subcategories={subcategoriesList} itemSlots={itemSlots} icons={icons} onRefresh={refreshItems} />}
       {tab === 'item-slots' && <AdminItemSlotsTab itemSlots={itemSlots} onRefresh={loadAll} />}
       {tab === 'inventory-cells' && <AdminInventoryCellsTab cells={inventoryCells} itemSlots={itemSlots} onRefresh={loadAll} />}
+      {tab === 'icons' && <AdminIconsTab icons={icons} onRefresh={loadAll} />}
       {tab === 'perks' && <AdminPerksTab perks={perks} skills={skills} onRefresh={refreshPerks} />}
       {tab === 'professions' && <AdminProfessionsTab professions={professions} skills={skills} onRefresh={refreshProfessions} />}
       {tab === 'skills' && <AdminSkillsTab skills={skills} characteristics={characteristicsList} onRefresh={refreshSkills} />}
