@@ -10,6 +10,10 @@ export const admin = {
   batchDeleteItems: (ids) => request('/admin/items/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   batchPriceItems: (ids, trade_price) =>
     request('/admin/items/batch-price', { method: 'PUT', body: JSON.stringify({ ids, trade_price }) }),
+  // Icons
+getIcons: () => request('/admin/icons'),
+createIcon: (data) => request('/admin/icons', { method: 'POST', body: JSON.stringify(data) }),
+deleteIcon: (id) => request(`/admin/icons/${id}`, { method: 'DELETE' }),
 
   // Perks
   getPerks: () => request('/admin/perks'),
