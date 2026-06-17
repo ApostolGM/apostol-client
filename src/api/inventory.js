@@ -44,4 +44,15 @@ export const inventory = {
     }),
   removeMod: (slotId, modItemId) =>
     request(`/inventory/${slotId}/mod/${modItemId}`, { method: 'DELETE' }),
+  // Контейнеры
+  takeFromContainer: (slotId, childSlotId, quantity) =>
+    request('/inventory/container/take', {
+      method: 'POST',
+      body: JSON.stringify({ slot_id: slotId, child_slot_id: childSlotId, quantity })
+    }),
+  useFromContainer: (slotId, childSlotId) =>
+    request('/inventory/container/use', {
+      method: 'POST',
+      body: JSON.stringify({ slot_id: slotId, child_slot_id: childSlotId })
+    }),
 };
