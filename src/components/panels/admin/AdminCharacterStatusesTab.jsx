@@ -1,19 +1,31 @@
 // components/panels/admin/AdminCharacterStatusesTab.jsx
 import { useState } from 'react';
 import { admin } from '../../../api/admin.js';
+import { request } from '../../../api/index.js';
 import useConfirm from '../../../hooks/useConfirm.jsx';
 
 export default function AdminCharacterStatusesTab({ statuses, onRefresh }) {
-  const [form, setForm] = useState({ name: '', icon: '💎', default_value: 100, min_value: 0, max_value: 100, sort_order: 0 });
   const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [form, setForm] = useState({ name: '', icon: '◆', default_value: 100, min_value: 0, max_value: 100, sort_order: 0 });
   const { confirm, ConfirmModal } = useConfirm();
 
   const handleCreate = async () => {
     if (!form.name.trim()) return;
     await admin.createCharacterStatus(form);
-    setForm({ name: '', icon: '💎', default_value: 100, min_value: 0, max_value: 100, sort_order: 0 });
-    setShowForm(false);
-    onRefresh();
+    setForm({ name: '', icon: '◆', default_value: 100, min_value: 0, max_value: 100, sort_order: 0 });
+    setShowForm(false); onRefresh();
+  };
+
+  const handleEdit = (st) => {
+    setEditId(st.id);
+    setForm({ name: st.name, icon: st.icon, default_value: st.default_value, min_value: st.min_value, max_value: st.max_value, sort_order: st.sort_order });
+    setShowForm(true);
+  };
+
+  const handleSaveEdit = async () => {
+    await request('/admin/character-statuses/' + editId, { method: 'PUT', body: JSON.stringify(form) });
+    setEditId(null); setShowForm(false); onRefresh();
   };
 
   const handleDelete = async (id) => {
@@ -24,7 +36,7 @@ export default function AdminCharacterStatusesTab({ statuses, onRefresh }) {
 
   return (
     <div>
-      <button onClick={() => setShowForm(!showForm)} className="text-xs bg-accent-orange text-wasteland-900 px-3 py-1.5 rounded mb-3">
+      <button onClick={() => { setEditId(null); setForm({ name: '', icon: '◆', default_value: 100, min_value: 0, max_value: 100, sort_order: 0 }); setShowForm(!showForm); }} className="text-xs bg-accent-orange text-wasteland-900 px-3 py-1.5 rounded mb-3">
         {showForm ? 'Отмена' : '+ Статус'}
       </button>
 
@@ -33,13 +45,15 @@ export default function AdminCharacterStatusesTab({ statuses, onRefresh }) {
           <input placeholder="Название" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
           <div className="flex gap-2">
             <div className="flex-1"><label className="text-wasteland-400 text-xs">Иконка</label><input value={form.icon} onChange={e => setForm({...form, icon: e.target.value})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" /></div>
-            <div className="flex-1"><label className="text-wasteland-400 text-xs">По умолчанию</label><input type="number" value={form.default_value} onChange={e => setForm({...form, default_value: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" /></div>
+            <div className="flex-1"><label className="text-wasteland-400 text-xs">По умолч.</label><input type="number" value={form.default_value} onChange={e => setForm({...form, default_value: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" /></div>
           </div>
           <div className="flex gap-2">
             <div className="flex-1"><label className="text-wasteland-400 text-xs">Мин</label><input type="number" value={form.min_value} onChange={e => setForm({...form, min_value: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" /></div>
             <div className="flex-1"><label className="text-wasteland-400 text-xs">Макс</label><input type="number" value={form.max_value} onChange={e => setForm({...form, max_value: parseInt(e.target.value)||0})} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" /></div>
           </div>
-          <button onClick={handleCreate} disabled={!form.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">Создать</button>
+          <button onClick={editId ? handleSaveEdit : handleCreate} disabled={!form.name} className="w-full bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">
+            {editId ? 'Сохранить' : 'Создать'}
+          </button>
         </div>
       )}
 
@@ -47,7 +61,10 @@ export default function AdminCharacterStatusesTab({ statuses, onRefresh }) {
         {statuses.map(st => (
           <div key={st.id} className="bg-wasteland-800 p-2 rounded border border-wasteland-600 text-xs flex justify-between items-center">
             <span className="text-wasteland-200">{st.icon} {st.name} ({st.default_value})</span>
-            <button onClick={() => handleDelete(st.id)} className="text-accent-red hover:text-red-400">🗑️</button>
+            <div className="flex gap-1">
+              <button onClick={() => handleEdit(st)} className="text-wasteland-400 hover:text-wasteland-200">✏</button>
+              <button onClick={() => handleDelete(st.id)} className="text-accent-red hover:text-red-400">✕</button>
+            </div>
           </div>
         ))}
       </div>
