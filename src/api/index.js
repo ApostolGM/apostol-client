@@ -21,9 +21,13 @@ export async function request(path, options = {}) {
     ...options.headers,
   };
 
+  // Запрещаем кеширование для всех запросов
+  const separator = path.includes('?') ? '&' : '?';
+  const url = `${API_URL}${path}${separator}_=${Date.now()}`;
+
   let res;
   try {
-    res = await fetch(`${API_URL}${path}`, { ...options, headers });
+    res = await fetch(url, { ...options, headers, cache: 'no-store' });
   } catch {
     throw new ApiError('Сетевая ошибка. Проверьте подключение.', 0);
   }
