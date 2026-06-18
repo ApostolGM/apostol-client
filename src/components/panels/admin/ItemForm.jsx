@@ -53,6 +53,7 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
   const handleSubmit = () => {
     const payload = { ...form };
     if (!payload.ammo_type_id) payload.ammo_type_id = null;
+    if (!payload.icon_id) payload.icon_id = null;
     if (!payload.mod_item_slot_id) payload.mod_item_slot_id = null;
     if (!payload.weapon_type) payload.weapon_type = null;
     if (!payload.icon_id) payload.icon_id = null;
