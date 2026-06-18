@@ -20,14 +20,24 @@ export default function AdminItemsTab({ items, ammoTypes, subcategories, itemSlo
 
   const handleSave = async (data) => {
     const cleaned = { ...data };
-    if (!cleaned.ammo_type_id) cleaned.ammo_type_id = null;
-    if (!cleaned.weapon_type) cleaned.weapon_type = null;
-    if (!cleaned.mod_item_slot_id) cleaned.mod_item_slot_id = null;
-    if (!cleaned.icon_id) cleaned.icon_id = null;
 
+    // Очищаем все UUID-поля — пустые строки заменяем на null
+    if (!cleaned.item_slot_id || cleaned.item_slot_id === '') cleaned.item_slot_id = null;
+    if (!cleaned.ammo_type_id || cleaned.ammo_type_id === '') cleaned.ammo_type_id = null;
+    if (!cleaned.mod_item_slot_id || cleaned.mod_item_slot_id === '') cleaned.mod_item_slot_id = null;
+    if (!cleaned.icon_id || cleaned.icon_id === '') cleaned.icon_id = null;
+    if (!cleaned.weapon_type || cleaned.weapon_type === '') cleaned.weapon_type = null;
+
+    // Контейнер
     const containerSlotId = itemSlots.find(s => s.name === 'container')?.id;
     if (cleaned.item_slot_id !== containerSlotId) {
       cleaned.container_items = [];
+    }
+
+    // Убираем пустые строки в accepted_ammo_types
+    if (cleaned.accepted_ammo_types) {
+      cleaned.accepted_ammo_types = cleaned.accepted_ammo_types.filter(id => id && id !== '');
+      if (cleaned.accepted_ammo_types.length === 0) cleaned.accepted_ammo_types = null;
     }
 
     if (editId) await admin.updateItem(editId, cleaned);
