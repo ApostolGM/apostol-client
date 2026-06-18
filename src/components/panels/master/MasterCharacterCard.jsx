@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { characters as charsApi } from '../../../api/characters.js';
 import MasterInventorySection from './MasterInventorySection.jsx';
+import Modal from '../../ui/Modal.jsx';
 import useConfirm from '../../../hooks/useConfirm.jsx';
 
 export default function MasterCharacterCard({ char, expanded, onToggle, onDelete, onParamChange, allSkills, allItems, campaignId, socketRef, onRefresh }) {
@@ -41,7 +42,7 @@ export default function MasterCharacterCard({ char, expanded, onToggle, onDelete
         <div className="flex items-center gap-2">
           <span className="text-wasteland-100 font-bold">{char.name}</span>
           <span className="text-accent-orange text-sm">{char.profession?.name}</span>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-accent-red hover:text-red-400 text-xs ml-2">🗑️</button>
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-accent-red hover:text-red-400 text-xs ml-2">✕</button>
         </div>
         <span className="text-wasteland-400 text-sm">{expanded ? '▲' : '▼'}</span>
       </div>
@@ -66,7 +67,7 @@ export default function MasterCharacterCard({ char, expanded, onToggle, onDelete
           <div>
             <h4 className="text-wasteland-400 text-xs uppercase mb-2">Экономика</h4>
             <div className="flex items-center gap-3">
-              <span className="text-wasteland-400 text-xs">💎 Валюта:</span>
+              <span className="text-wasteland-400 text-xs">◆ Валюта:</span>
               <input type="number" min="0" value={char.currency || 0}
                 onChange={(e) => onParamChange(char.id, 'currency', parseInt(e.target.value) || 0)}
                 className="bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm w-28" />
@@ -76,7 +77,7 @@ export default function MasterCharacterCard({ char, expanded, onToggle, onDelete
           {/* Рассрочка гибели */}
           {char.perks?.some(p => p.name === 'Рассрочка гибели') && (
             <div>
-              <h4 className="text-wasteland-400 text-xs uppercase mb-2">💀 Рассрочка гибели</h4>
+              <h4 className="text-wasteland-400 text-xs uppercase mb-2">☠ Рассрочка гибели</h4>
               <div className="flex items-center gap-3">
                 <span className="text-wasteland-400 text-xs">Счётчик: {char.death_loan_count || 0}</span>
                 {(char.death_loan_count || 0) > 0 && (
@@ -117,44 +118,74 @@ export default function MasterCharacterCard({ char, expanded, onToggle, onDelete
 }
 
 function SkillsEditor({ char, allSkills, onAdd, onUpdate, onDelete }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [selectedSkill, setSelectedSkill] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [search, setSearch] = useState('');
   const [modifier, setModifier] = useState(0);
+
   const existingIds = (char.skills || []).map(s => s.id);
   const availableSkills = allSkills.filter(s => !existingIds.includes(s.id));
+  const filtered = availableSkills.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+
+  const handleAdd = (skillId) => {
+    onAdd(skillId, modifier);
+    setModifier(0);
+    setSearch('');
+    setShowModal(false);
+  };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-2">
         <h4 className="text-wasteland-400 text-xs uppercase">Навыки</h4>
-        <button onClick={() => setShowAdd(!showAdd)} className="text-xs bg-wasteland-700 hover:bg-wasteland-600 px-2 py-1 rounded text-wasteland-300">+ Навык</button>
+        <button onClick={() => setShowModal(true)} className="text-xs bg-accent-orange text-wasteland-900 px-2 py-1 rounded font-bold">+ Навык</button>
       </div>
-      {showAdd && (
-        <div className="bg-wasteland-700 p-2 rounded mb-2 space-y-1">
-          <select value={selectedSkill} onChange={e => setSelectedSkill(e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-            <option value="">Выбрать...</option>
-            {availableSkills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          <div className="flex items-center gap-1">
-            <span className="text-wasteland-400 text-xs">%:</span>
-            <input type="number" value={modifier} onChange={e => setModifier(parseFloat(e.target.value) || 0)} className="w-12 bg-wasteland-900 border border-wasteland-600 rounded p-0.5 text-wasteland-100 text-xs text-center" />
-            <button onClick={() => { onAdd(selectedSkill, modifier); setSelectedSkill(''); setModifier(0); setShowAdd(false); }} disabled={!selectedSkill} className="bg-accent-orange text-wasteland-900 text-xs py-1 px-2 rounded font-bold disabled:opacity-50">OK</button>
-          </div>
-        </div>
-      )}
+
       {char.skills?.length > 0 ? (
         <div className="space-y-1">
           {char.skills.map(skill => (
             <div key={skill.id} className="flex items-center justify-between bg-wasteland-700 p-1.5 rounded text-xs">
-              <span className="text-wasteland-200">{skill.name} {skill.linkBonus ? <span className="text-accent-yellow">(+{skill.linkBonus} свз.)</span> : ''}</span>
+              <span className="text-wasteland-200">{skill.name} {skill.linkBonus ? <span className="text-accent-yellow">(+{skill.linkBonus})</span> : ''}</span>
               <div className="flex items-center gap-1">
-                <button onClick={() => { const m = prompt('Новый процент:', skill.modifier); if (m !== null) onUpdate(skill.id, parseFloat(m) || 0); }} className="text-wasteland-400 hover:text-wasteland-200">{skill.totalModifier}%</button>
+                <button onClick={() => { const m = prompt('Новый %:', skill.modifier); if (m !== null) onUpdate(skill.id, parseFloat(m) || 0); }} className="text-wasteland-400 hover:text-wasteland-200">{skill.totalModifier}%</button>
                 <button onClick={() => onDelete(skill.id)} className="text-accent-red hover:text-red-400 ml-1">✕</button>
               </div>
             </div>
           ))}
         </div>
       ) : <p className="text-wasteland-500 text-xs">Нет навыков</p>}
+
+      {/* Модальное окно выбора навыка */}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Добавить навык">
+        <div className="space-y-3">
+          <input
+            placeholder="Поиск навыка..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm"
+            autoFocus
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-wasteland-400 text-xs">Модификатор %:</span>
+            <input type="number" value={modifier} onChange={e => setModifier(parseFloat(e.target.value)||0)} className="w-20 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
+          </div>
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {filtered.length === 0 ? (
+              <p className="text-wasteland-500 text-xs text-center py-4">Ничего не найдено</p>
+            ) : (
+              filtered.map(skill => (
+                <button
+                  key={skill.id}
+                  onClick={() => handleAdd(skill.id)}
+                  className="w-full text-left bg-wasteland-700 hover:bg-wasteland-600 p-2 rounded text-sm text-wasteland-200 transition"
+                >
+                  {skill.name}
+                  {skill.characteristic && <span className="text-wasteland-500 ml-2">({skill.characteristic.short_name})</span>}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
