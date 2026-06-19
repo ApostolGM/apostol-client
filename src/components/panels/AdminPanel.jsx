@@ -134,6 +134,7 @@ export default function AdminPanel() {
       {tab === 'skill-links' && <AdminSkillLinksTab skillLinks={skillLinks} skills={skills} onRefresh={loadAll} />}
       {tab === 'characteristics' && <AdminCharacteristicsTab characteristics={characteristicsList} onRefresh={loadAll} />}
       {tab === 'statuses' && <AdminCharacterStatusesTab statuses={characterStatuses} onRefresh={loadAll} />}
+      {tab === 'item-slots' && <AdminItemSlotsTab itemSlots={itemSlots} inventoryCells={inventoryCells} onRefresh={loadAll} />}
       {tab === 'ammo' && <AdminAmmoTab ammoTypes={ammoTypes} onRefresh={loadAll} />}
       {tab === 'currencies' && <AdminCurrenciesTab currencies={currenciesList} onRefresh={loadAll} />}
       {tab === 'shop' && <AdminShopTab presets={shopPresets} items={items} onRefresh={loadAll} />}
