@@ -6,6 +6,7 @@ export const admin = {
   getItems: () => request('/admin/items'),
   createItem: (data) => request('/admin/items', { method: 'POST', body: JSON.stringify(data) }),
   updateItem: (id, data) => request(`/admin/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateItemSlot: (id, data) => request(`/admin/item-slots/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteItem: (id) => request(`/admin/items/${id}`, { method: 'DELETE' }),
   batchDeleteItems: (ids) => request('/admin/items/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   batchPriceItems: (ids, trade_price) =>
