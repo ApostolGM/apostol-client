@@ -20,6 +20,8 @@ export default function StatusSliders({ statuses, editMode, isMaster, onSave, on
     onSave(statusArray);
   };
 
+  if (!statuses.length) return null;
+
   return (
     <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600">
       <div className="flex justify-between items-center mb-3">
@@ -34,8 +36,8 @@ export default function StatusSliders({ statuses, editMode, isMaster, onSave, on
       {statuses.map(s => (
         <div key={s.id} className="mb-3">
           <div className="flex justify-between text-sm mb-1">
-            <span className="text-wasteland-400">{s.icon} {s.name}</span>
-            <span className="text-wasteland-300">{values[s.id] ?? s.value}%</span>
+            <span className="text-wasteland-400">{s.icon || '◆'} {s.name}</span>
+            <span className="text-wasteland-300">{values[s.id] ?? s.value}</span>
           </div>
           <input type="range" min={s.min || 0} max={s.max || 100}
             value={values[s.id] ?? s.value}
