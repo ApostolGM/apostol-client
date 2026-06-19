@@ -125,7 +125,6 @@ export default function AdminPanel() {
       </div>
 
       {tab === 'items' && <AdminItemsTab items={items} ammoTypes={ammoTypes} subcategories={subcategoriesList} itemSlots={itemSlots} icons={icons} onRefresh={refreshItems} />}
-      {tab === 'item-slots' && <AdminItemSlotsTab itemSlots={itemSlots} onRefresh={loadAll} />}
       {tab === 'inventory-cells' && <AdminInventoryCellsTab cells={inventoryCells} itemSlots={itemSlots} onRefresh={loadAll} />}
       {tab === 'icons' && <AdminIconsTab icons={icons} onRefresh={loadAll} />}
       {tab === 'perks' && <AdminPerksTab perks={perks} skills={skills} onRefresh={refreshPerks} />}
