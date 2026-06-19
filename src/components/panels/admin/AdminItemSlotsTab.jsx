@@ -4,21 +4,14 @@ import { admin } from '../../../api/admin.js';
 import { request } from '../../../api/index.js';
 import useConfirm from '../../../hooks/useConfirm.jsx';
 
-const BUILDER_BLOCKS = {
-  equippable: { type: 'boolean', label: 'Можно экипировать', default: false },
-  equip_cells: { type: 'multiselect', label: 'Ячейки экипировки', default: [] },
-  actions: { type: 'actions', label: 'Действия', default: [] },
-  properties: { type: 'properties', label: 'Поля предмета', default: [] },
-};
-
 export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh }) {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
-  const [rulesEditor, setRulesEditor] = useState(null); // id слота для редактора правил
-  const [rulesMode, setRulesMode] = useState('builder'); // 'builder' | 'json'
+  const [rulesEditor, setRulesEditor] = useState(null);
+  const [rulesMode, setRulesMode] = useState('builder');
   const [rulesJson, setRulesJson] = useState('{}');
   const [rulesObj, setRulesObj] = useState({});
   const [rulesError, setRulesError] = useState('');
@@ -32,9 +25,16 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
   };
 
   const handleEdit = (slot) => { setEditId(slot.id); setEditName(slot.name); setEditDesc(slot.description || ''); };
+
   const handleSaveEdit = async () => {
     await request('/admin/item-slots/' + editId, { method: 'PUT', body: JSON.stringify({ name: editName, description: editDesc }) });
     setEditId(null);
+    onRefresh();
+  };
+
+  const handleDelete = async (id) => {
+    if (!await confirm('Удалить слот? Предметы этого слота останутся без привязки.')) return;
+    await admin.deleteItemSlot(id);
     onRefresh();
   };
 
@@ -149,7 +149,6 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
 
                 {rulesMode === 'builder' && (
                   <div className="space-y-3">
-                    {/* Можно экипировать */}
                     <label className="flex items-center gap-2 text-xs text-wasteland-300">
                       <input type="checkbox" checked={rulesObj.equippable || false} onChange={e => updateRule('equippable', e.target.checked)} />
                       Можно экипировать
@@ -224,9 +223,4 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
       {ConfirmModal}
     </div>
   );
-}
-
-// Добавить handleDelete (был упущен в рендере)
-function handleDelete(id) {
-  // используем confirm из замыкания — переопределим ниже
 }
