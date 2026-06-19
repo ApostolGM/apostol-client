@@ -57,8 +57,12 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
 
   const update = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
-  const currentSlotName = itemSlots.find(s => s.id === form.item_slot_id)?.name || '';
-  const isWeapon = currentSlotName === 'weapon';
+  const currentSlot = itemSlots.find(s => s.id === form.item_slot_id);
+  const currentSlotName = currentSlot?.name || '';
+  const slotRules = currentSlot?.rules || {};
+  const isEquippable = slotRules.equippable || false;
+  const hasActions = (slotRules.actions || []).length > 0;
+  const hasAmmoAction = (slotRules.actions || []).some(a => a.consume_ammo);
   const isMod = currentSlotName === 'mod';
   const isAmmo = currentSlotName === 'ammo';
   const isContainer = currentSlotName === 'container';
@@ -72,7 +76,7 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
     if (!payload.weapon_type) payload.weapon_type = null;
     if (!payload.icon_id) payload.icon_id = null;
     if (!isContainer) payload.container_items = [];
-    if (isWeapon) payload.subcategory = payload.weapon_type || 'melee';
+    if (hasActions) payload.subcategory = payload.weapon_type || '';
     onSave(payload);
   };
 
@@ -80,52 +84,25 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
     <div className="bg-wasteland-800 p-4 rounded-lg border border-wasteland-600 mb-3 space-y-2">
       <h3 className="text-wasteland-300 text-sm font-bold">{initialData ? 'Редактировать предмет' : 'Новый предмет'}</h3>
 
-      {/* Название + иконка */}
       <div className="flex gap-2 items-start">
         <input placeholder="Название" value={form.name} onChange={e => update('name', e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
 
-        {/* Кнопка выбора иконки */}
         <div className="relative flex-shrink-0" ref={iconPickerRef}>
-          <button
-            type="button"
-            onClick={() => setShowIconPicker(!showIconPicker)}
+          <button type="button" onClick={() => setShowIconPicker(!showIconPicker)}
             className="w-10 h-10 bg-wasteland-900 border border-wasteland-600 rounded flex items-center justify-center hover:border-wasteland-500 transition"
-            title={selectedIcon ? selectedIcon.name : 'Выбрать иконку'}
-          >
-            {selectedIcon ? (
-              <img src={selectedIcon.url} alt={selectedIcon.name} className="w-8 h-8 object-contain" />
-            ) : (
-              <span className="text-wasteland-500 text-lg">+</span>
-            )}
+            title={selectedIcon ? selectedIcon.name : 'Выбрать иконку'}>
+            {selectedIcon ? <img src={selectedIcon.url} alt="" className="w-8 h-8 object-contain" /> : <span className="text-wasteland-500 text-lg">+</span>}
           </button>
-
           {selectedIcon && (
-            <button
-              onClick={() => update('icon_id', '')}
-              className="absolute -top-1 -right-1 w-4 h-4 bg-accent-red text-wasteland-900 rounded-full text-xs flex items-center justify-center hover:bg-red-500"
-            >
-              ×
-            </button>
+            <button onClick={() => update('icon_id', '')} className="absolute -top-1 -right-1 w-4 h-4 bg-accent-red text-wasteland-900 rounded-full text-xs flex items-center justify-center">×</button>
           )}
-
-          {/* Выпадающая сетка иконок */}
           {showIconPicker && (
             <div className="absolute top-12 right-0 w-64 max-h-64 overflow-y-auto bg-wasteland-800 border border-wasteland-600 rounded-lg p-2 z-50 grid grid-cols-4 gap-1 shadow-xl">
-              <button
-                onClick={() => { update('icon_id', ''); setShowIconPicker(false); }}
-                className="w-full aspect-square bg-wasteland-700 rounded border border-wasteland-600 flex items-center justify-center hover:bg-wasteland-600 text-wasteland-400 text-xs"
-              >
-                —
-              </button>
+              <button onClick={() => { update('icon_id', ''); setShowIconPicker(false); }} className="w-full aspect-square bg-wasteland-700 rounded border border-wasteland-600 flex items-center justify-center hover:bg-wasteland-600 text-wasteland-400 text-xs">—</button>
               {icons.map(icon => (
-                <button
-                  key={icon.id}
-                  onClick={() => { update('icon_id', icon.id); setShowIconPicker(false); }}
-                  className={`w-full aspect-square rounded border flex items-center justify-center p-1 hover:border-accent-orange transition ${
-                    form.icon_id === icon.id ? 'border-accent-orange bg-wasteland-700' : 'border-wasteland-600 bg-wasteland-900'
-                  }`}
-                  title={icon.name}
-                >
+                <button key={icon.id} onClick={() => { update('icon_id', icon.id); setShowIconPicker(false); }}
+                  className={`w-full aspect-square rounded border flex items-center justify-center p-1 hover:border-accent-orange transition ${form.icon_id === icon.id ? 'border-accent-orange bg-wasteland-700' : 'border-wasteland-600 bg-wasteland-900'}`}
+                  title={icon.name}>
                   <img src={icon.url} alt={icon.name} className="max-w-full max-h-full object-contain" />
                 </button>
               ))}
@@ -134,53 +111,40 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
         </div>
       </div>
 
-      {/* Тип предмета */}
       <select value={form.item_slot_id} onChange={e => update('item_slot_id', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
         <option value="">Тип предмета</option>
         {itemSlots.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
       </select>
 
-      {/* Оружие */}
-      {isWeapon && (
+      {hasActions && (
         <select value={form.weapon_type} onChange={e => update('weapon_type', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
-          <option value="">Тип оружия</option>
+          <option value="">Подтип</option>
           <option value="melee">Ближний бой</option>
           <option value="ranged">Дальний бой</option>
           <option value="thrown">Метательное</option>
         </select>
       )}
 
-      {/* Дальнее оружие */}
-      {isWeapon && form.weapon_type === 'ranged' && (
+      {hasAmmoAction && (
         <>
           <select value={form.ammo_type_id || ''} onChange={e => update('ammo_type_id', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
             <option value="">Тип патронов</option>
             {ammoTypes.map(at => <option key={at.id} value={at.id}>{at.name}</option>)}
           </select>
           <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="text-wasteland-400 text-xs">Макс. патронов</label>
-              <input type="number" value={form.max_ammo || ''} onChange={e => update('max_ammo', parseInt(e.target.value)||0)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-            </div>
-            <div className="flex-1">
-              <label className="text-wasteland-400 text-xs">Выстрелов/ход</label>
-              <input type="number" min="1" value={form.shots_per_action} onChange={e => update('shots_per_action', parseInt(e.target.value)||1)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-            </div>
-            <div className="flex-1">
-              <label className="text-wasteland-400 text-xs">Патронов/выстрел</label>
-              <input type="number" min="1" value={form.ammo_per_shot} onChange={e => update('ammo_per_shot', parseInt(e.target.value)||1)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" />
-            </div>
+            <div className="flex-1"><label className="text-wasteland-400 text-xs">Макс. патронов</label><input type="number" value={form.max_ammo || ''} onChange={e => update('max_ammo', parseInt(e.target.value)||0)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" /></div>
+            <div className="flex-1"><label className="text-wasteland-400 text-xs">Выстрелов/ход</label><input type="number" min="1" value={form.shots_per_action} onChange={e => update('shots_per_action', parseInt(e.target.value)||1)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" /></div>
+            <div className="flex-1"><label className="text-wasteland-400 text-xs">Патронов/выстрел</label><input type="number" min="1" value={form.ammo_per_shot} onChange={e => update('ammo_per_shot', parseInt(e.target.value)||1)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm" /></div>
           </div>
         </>
       )}
 
-      {isWeapon && (
+      {isEquippable && (
         <label className="flex items-center gap-2 text-xs text-wasteland-300">
-          <input type="checkbox" checked={form.is_heavy} onChange={e => update('is_heavy', e.target.checked)} />Тяжёлое оружие
+          <input type="checkbox" checked={form.is_heavy} onChange={e => update('is_heavy', e.target.checked)} />Тяжёлое (занимает две руки)
         </label>
       )}
 
-      {/* Мод */}
       {isMod && (
         <select value={form.mod_item_slot_id || ''} onChange={e => update('mod_item_slot_id', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
           <option value="">На любой предмет</option>
@@ -188,7 +152,6 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
         </select>
       )}
 
-      {/* Патроны */}
       {isAmmo && (
         <select value={form.ammo_type_id || ''} onChange={e => update('ammo_type_id', e.target.value)} className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-1.5 text-wasteland-100 text-sm">
           <option value="">Тип патронов</option>
@@ -196,7 +159,6 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
         </select>
       )}
 
-      {/* Контейнер */}
       {isContainer && (
         <>
           <label className="text-wasteland-400 text-xs block">Содержимое контейнера:</label>
@@ -204,7 +166,6 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
         </>
       )}
 
-      {/* Обычный предмет */}
       {!isContainer && (
         <>
           <div className="flex gap-2">
@@ -215,13 +176,11 @@ export default function ItemForm({ initialData, ammoTypes, items, itemSlots, ico
         </>
       )}
 
-      {/* Динамический */}
       <label className="flex items-center gap-2 text-xs text-wasteland-300">
         <input type="checkbox" checked={form.is_dynamic} onChange={e => update('is_dynamic', e.target.checked)} />
         Динамический (изменения применяются ко всем экземплярам)
       </label>
 
-      {/* Кнопки */}
       <div className="flex gap-2">
         <button onClick={handleSubmit} disabled={!form.name} className="flex-1 bg-accent-orange text-wasteland-900 py-2 rounded text-sm font-bold disabled:opacity-50">
           {initialData ? 'Сохранить' : 'Создать'}
