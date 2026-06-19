@@ -8,10 +8,7 @@ import Modal from '../../ui/Modal.jsx';
 import useConfirm from '../../../hooks/useConfirm.jsx';
 
 export default function MasterInventorySection({ charId, inventory: inv, allItems, onRefresh }) {
-  const [showAdd, setShowAdd] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [selectedItem, setSelectedItem] = useState('');
-  const [quantity, setQuantity] = useState(1);
   const [weightInfo, setWeightInfo] = useState(null);
   const [search, setSearch] = useState('');
   const { confirm } = useConfirm();
@@ -23,7 +20,7 @@ export default function MasterInventorySection({ charId, inventory: inv, allItem
   const handleAdd = async (itemId, qty) => {
     if (!itemId) return;
     await master.addItem(charId, itemId, qty || 1, 'рюкзак');
-    setSelectedItem(''); setQuantity(1); setShowAdd(false); setShowQuickAdd(false); setSearch('');
+    setShowQuickAdd(false); setSearch('');
     onRefresh();
   };
 
@@ -45,17 +42,15 @@ export default function MasterInventorySection({ charId, inventory: inv, allItem
   };
 
   const handleAddMod = async (slotId, slotItem) => {
-    const targetSlot = slotItem?.item_slot?.name || slotItem?.slot;
-    const weaponType = slotItem?.weapon_type;
+    const targetSlotName = slotItem?.item_slot?.name;
     const availableMods = allItems.filter(i => {
       if (i.item_slot?.name !== 'mod') return false;
       if (!i.mod_item_slot_id) return true;
-      const modSlotName = allItems.find(x => x.id === i.mod_item_slot_id)?.item_slot?.name;
-      return modSlotName === targetSlot;
+      return i.mod_item_slot_id === slotItem?.item_slot_id;
     });
     if (availableMods.length === 0) { alert('Нет подходящих модификаций'); return; }
     const modList = availableMods.map(m => `${m.name} (${m.id.substring(0, 8)})`).join('\n');
-    const modId = prompt('Доступные модификации:\n' + modList + '\n\nВведите ID модификации:');
+    const modId = prompt('Доступные модификации:\n' + modList + '\n\nВведите ID:');
     if (modId) {
       try { await inventory.addMod(slotId, modId.trim()); onRefresh(); }
       catch (e) { alert(e.message); }
@@ -73,7 +68,7 @@ export default function MasterInventorySection({ charId, inventory: inv, allItem
   const filteredItems = allItems.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
   const itemsBySlot = {};
   for (const item of filteredItems) {
-    const slot = item.item_slot?.name || item.slot || 'other';
+    const slot = item.item_slot?.name || 'other';
     if (!itemsBySlot[slot]) itemsBySlot[slot] = [];
     itemsBySlot[slot].push(item);
   }
@@ -99,16 +94,10 @@ export default function MasterInventorySection({ charId, inventory: inv, allItem
       {backpack.length > 0 && <p className="text-wasteland-500 text-xs mt-2">Рюкзак:</p>}
       {backpack.map(s => <MasterSlotRow key={s.id} slot={s} onConditionChange={handleConditionChange} onQuantityChange={handleQuantityChange} onRemove={handleRemoveSlot} onAddMod={handleAddMod} onRemoveMod={handleRemoveMod} />)}
 
-      {/* Модальное окно быстрого добавления */}
       <Modal isOpen={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Выдать предмет">
         <div className="space-y-3">
-          <input
-            placeholder="Поиск предмета..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm"
-            autoFocus
-          />
+          <input placeholder="Поиск предмета..." value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-sm" autoFocus />
           <div className="max-h-64 overflow-y-auto space-y-2">
             {Object.keys(itemsBySlot).length === 0 ? (
               <p className="text-wasteland-500 text-xs text-center py-4">Ничего не найдено</p>
@@ -118,11 +107,8 @@ export default function MasterInventorySection({ charId, inventory: inv, allItem
                   <h5 className="text-wasteland-500 text-xs uppercase mb-1">{slot}</h5>
                   <div className="space-y-1">
                     {slotItems.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => handleAdd(item.id, 1)}
-                        className="w-full text-left bg-wasteland-700 hover:bg-wasteland-600 p-2 rounded text-sm text-wasteland-200 transition flex justify-between items-center"
-                      >
+                      <button key={item.id} onClick={() => handleAdd(item.id, 1)}
+                        className="w-full text-left bg-wasteland-700 hover:bg-wasteland-600 p-2 rounded text-sm text-wasteland-200 transition flex justify-between items-center">
                         <span>{item.icon_data?.url ? <img src={item.icon_data.url} alt="" className="w-4 h-4 inline mr-1 object-contain" /> : ''}{item.name}</span>
                         <span className="text-wasteland-500 text-xs">{item.weight}кг</span>
                       </button>
