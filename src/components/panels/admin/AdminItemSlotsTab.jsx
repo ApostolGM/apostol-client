@@ -1,8 +1,26 @@
 // components/panels/admin/AdminItemSlotsTab.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { admin } from '../../../api/admin.js';
 import { request } from '../../../api/index.js';
 import useConfirm from '../../../hooks/useConfirm.jsx';
+
+const RULE_TEMPLATES = [
+  { key: 'equippable', label: 'Можно экипировать', category: 'Основное' },
+  { key: 'is_container', label: 'Это контейнер', category: 'Основное' },
+  { key: 'is_quest', label: 'Квестовый предмет', category: 'Основное' },
+  { key: 'is_heavy', label: 'Занимает две руки', category: 'Основное' },
+  { key: 'skill_check', label: 'Требуется проверка навыка', category: 'Действия' },
+  { key: 'consume_ammo', label: 'Тратит патроны при атаке', category: 'Действия' },
+  { key: 'roll_per_shot', label: 'Бросок на каждый выстрел', category: 'Действия' },
+  { key: 'destroy_on_use', label: 'Уничтожается после использования', category: 'Действия' },
+  { key: 'reload', label: 'Можно перезарядить', category: 'Действия' },
+  { key: 'heal', label: 'Восстанавливает здоровье', category: 'Действия' },
+  { key: 'show_ammo', label: 'Показывать патроны', category: 'Поля' },
+  { key: 'show_shots', label: 'Показывать выстрелы', category: 'Поля' },
+  { key: 'show_weight', label: 'Показывать вес', category: 'Поля' },
+  { key: 'show_price', label: 'Показывать цену', category: 'Поля' },
+  { key: 'show_durability', label: 'Показывать прочность', category: 'Поля' },
+];
 
 export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh }) {
   const [name, setName] = useState('');
@@ -11,10 +29,11 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [rulesEditor, setRulesEditor] = useState(null);
-  const [rulesMode, setRulesMode] = useState('builder');
-  const [rulesJson, setRulesJson] = useState('{}');
-  const [rulesObj, setRulesObj] = useState({});
-  const [rulesError, setRulesError] = useState('');
+  const [activeRules, setActiveRules] = useState([]);
+  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [customKey, setCustomKey] = useState('');
+  const [customValue, setCustomValue] = useState('true');
+  const [customType, setCustomType] = useState('boolean');
   const { confirm, ConfirmModal } = useConfirm();
 
   const handleCreate = async () => {
@@ -25,7 +44,6 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
   };
 
   const handleEdit = (slot) => { setEditId(slot.id); setEditName(slot.name); setEditDesc(slot.description || ''); };
-
   const handleSaveEdit = async () => {
     await request('/admin/item-slots/' + editId, { method: 'PUT', body: JSON.stringify({ name: editName, description: editDesc }) });
     setEditId(null);
@@ -33,7 +51,7 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
   };
 
   const handleDelete = async (id) => {
-    if (!await confirm('Удалить слот? Предметы этого слота останутся без привязки.')) return;
+    if (!await confirm('Удалить слот?')) return;
     await admin.deleteItemSlot(id);
     onRefresh();
   };
@@ -41,60 +59,92 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
   const openRules = (slot) => {
     setRulesEditor(slot.id);
     const rules = slot.rules || {};
-    setRulesObj(rules);
-    setRulesJson(JSON.stringify(rules, null, 2));
-    setRulesMode('builder');
-    setRulesError('');
+    const parsed = [];
+    for (const [key, value] of Object.entries(rules)) {
+      if (key === 'actions' || key === 'properties') continue;
+      parsed.push({ key, value: typeof value === 'boolean' ? value : JSON.stringify(value), isCustom: !RULE_TEMPLATES.find(t => t.key === key) });
+    }
+    if (rules.actions) {
+      for (const action of rules.actions) {
+        for (const [key, value] of Object.entries(action)) {
+          if (key === 'name' || key === 'label') continue;
+          parsed.push({ key, value: typeof value === 'boolean' ? value : JSON.stringify(value), isCustom: false, actionName: action.name });
+        }
+      }
+    }
+    if (rules.properties) {
+      for (const prop of rules.properties) {
+        parsed.push({ key: `prop:${prop.name}`, value: `${prop.type}:${prop.label}`, isCustom: false });
+      }
+    }
+    setActiveRules(parsed);
+    setSelectedTemplate('');
+  };
+
+  const addTemplateRule = (templateKey) => {
+    const template = RULE_TEMPLATES.find(t => t.key === templateKey);
+    if (!template) return;
+    if (activeRules.find(r => r.key === templateKey && !r.actionName)) return;
+    setActiveRules(prev => [...prev, { key: templateKey, value: true, isCustom: false }]);
+    setSelectedTemplate('');
+  };
+
+  const removeRule = (index) => {
+    setActiveRules(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const addCustomRule = () => {
+    if (!customKey.trim()) return;
+    let value = customValue;
+    if (customType === 'boolean') value = customValue === 'true';
+    else if (customType === 'number') value = Number(customValue);
+    setActiveRules(prev => [...prev, { key: customKey.trim(), value, isCustom: true }]);
+    setCustomKey(''); setCustomValue('true'); setCustomType('boolean');
   };
 
   const handleSaveRules = async () => {
-    try {
-      const parsed = JSON.parse(rulesJson);
-      await request('/admin/item-slots/' + rulesEditor, { method: 'PUT', body: JSON.stringify({ rules: parsed }) });
-      setRulesEditor(null);
-      onRefresh();
-    } catch {
-      setRulesError('Невалидный JSON');
+    const rules = {};
+    const actions = [];
+    const properties = [];
+    const actionProps = {};
+
+    for (const rule of activeRules) {
+      if (rule.key.startsWith('prop:')) {
+        const [type, label] = rule.value.split(':');
+        properties.push({ name: rule.key.replace('prop:', ''), type: type || 'text', label: label || '' });
+        continue;
+      }
+      if (rule.actionName) {
+        if (!actionProps[rule.actionName]) actionProps[rule.actionName] = {};
+        actionProps[rule.actionName][rule.key] = rule.value;
+        continue;
+      }
+      if (RULE_TEMPLATES.find(t => t.key === rule.key && t.category === 'Действия')) {
+        if (!actionProps['attack']) actionProps['attack'] = {};
+        actionProps['attack'][rule.key] = rule.value;
+        continue;
+      }
+      rules[rule.key] = rule.value;
     }
+
+    for (const [name, props] of Object.entries(actionProps)) {
+      actions.push({ name, label: name === 'attack' ? 'Атаковать' : name, ...props });
+    }
+
+    if (actions.length) rules.actions = actions;
+    if (properties.length) rules.properties = properties;
+
+    await request('/admin/item-slots/' + rulesEditor, { method: 'PUT', body: JSON.stringify({ rules }) });
+    setRulesEditor(null);
+    onRefresh();
   };
 
-  const updateRule = (key, value) => {
-    const updated = { ...rulesObj, [key]: value };
-    setRulesObj(updated);
-    setRulesJson(JSON.stringify(updated, null, 2));
-  };
-
-  const addAction = () => {
-    const actions = [...(rulesObj.actions || []), { name: 'new_action', label: 'Новое действие', skill_check: false }];
-    updateRule('actions', actions);
-  };
-
-  const updateAction = (index, field, value) => {
-    const actions = [...(rulesObj.actions || [])];
-    actions[index] = { ...actions[index], [field]: value };
-    updateRule('actions', actions);
-  };
-
-  const removeAction = (index) => {
-    const actions = (rulesObj.actions || []).filter((_, i) => i !== index);
-    updateRule('actions', actions);
-  };
-
-  const addProperty = () => {
-    const props = [...(rulesObj.properties || []), { name: 'new_prop', type: 'text', label: 'Новое поле' }];
-    updateRule('properties', props);
-  };
-
-  const updateProperty = (index, field, value) => {
-    const props = [...(rulesObj.properties || [])];
-    props[index] = { ...props[index], [field]: value };
-    updateRule('properties', props);
-  };
-
-  const removeProperty = (index) => {
-    const props = (rulesObj.properties || []).filter((_, i) => i !== index);
-    updateRule('properties', props);
-  };
+  const availableTemplates = RULE_TEMPLATES.filter(t => !activeRules.find(r => r.key === t.key && !r.actionName));
+  const grouped = {};
+  for (const t of availableTemplates) {
+    if (!grouped[t.category]) grouped[t.category] = [];
+    grouped[t.category].push(t);
+  }
 
   return (
     <div>
@@ -119,9 +169,7 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
                 <>
                   <span className="text-wasteland-200 font-bold">
                     {slot.name}
-                    {slot.rules && Object.keys(slot.rules).length > 0 && (
-                      <span className="text-accent-green text-xs ml-1">⚙</span>
-                    )}
+                    {slot.rules && Object.keys(slot.rules).length > 0 && <span className="text-accent-green text-xs ml-1">⚙</span>}
                   </span>
                   <div className="flex gap-1">
                     <button onClick={() => openRules(slot)} className="text-accent-green hover:text-green-400 text-xs px-1" title="Правила">⚙</button>
@@ -132,84 +180,62 @@ export default function AdminItemSlotsTab({ itemSlots, inventoryCells, onRefresh
               )}
             </div>
 
-            {/* Редактор правил */}
             {rulesEditor === slot.id && (
               <div className="bg-wasteland-700 p-3 rounded-b border border-t-0 border-wasteland-600 space-y-3 ml-2">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-wasteland-300 text-xs font-bold">Правила: {slot.name}</h4>
+                <h4 className="text-wasteland-300 text-xs font-bold">Правила: {slot.name}</h4>
+
+                {/* Активные правила */}
+                <div className="space-y-1">
+                  {activeRules.length === 0 && <p className="text-wasteland-500 text-xs">Нет активных правил</p>}
+                  {activeRules.map((rule, i) => (
+                    <div key={i} className="flex justify-between items-center bg-wasteland-800 p-1.5 rounded text-xs">
+                      <span className="text-wasteland-200">
+                        {rule.key}
+                        {rule.value !== true && rule.value !== false && <span className="text-wasteland-500 ml-1">= {String(rule.value)}</span>}
+                        {rule.isCustom && <span className="text-accent-yellow ml-1">(своё)</span>}
+                      </span>
+                      <button onClick={() => removeRule(i)} className="text-accent-red text-xs px-1">✕</button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Добавить из списка */}
+                <div>
+                  <label className="text-wasteland-400 text-xs block mb-1">Добавить из списка:</label>
                   <div className="flex gap-1">
-                    <button onClick={() => setRulesMode('builder')} className={`text-xs px-2 py-0.5 rounded ${rulesMode === 'builder' ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>
-                      Конструктор
-                    </button>
-                    <button onClick={() => setRulesMode('json')} className={`text-xs px-2 py-0.5 rounded ${rulesMode === 'json' ? 'bg-accent-orange text-wasteland-900' : 'bg-wasteland-600 text-wasteland-300'}`}>
-                      JSON
-                    </button>
+                    <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
+                      <option value="">Выбрать...</option>
+                      {Object.entries(grouped).map(([cat, temps]) => (
+                        <optgroup key={cat} label={cat}>
+                          {temps.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                        </optgroup>
+                      ))}
+                    </select>
+                    <button onClick={() => addTemplateRule(selectedTemplate)} disabled={!selectedTemplate} className="bg-accent-green text-wasteland-900 text-xs px-2 py-1 rounded">+</button>
                   </div>
                 </div>
 
-                {rulesMode === 'builder' && (
-                  <div className="space-y-3">
-                    <label className="flex items-center gap-2 text-xs text-wasteland-300">
-                      <input type="checkbox" checked={rulesObj.equippable || false} onChange={e => updateRule('equippable', e.target.checked)} />
-                      Можно экипировать
-                    </label>
-
-                    {/* Действия */}
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-wasteland-400 text-xs">Действия</span>
-                        <button onClick={addAction} className="text-xs bg-wasteland-600 px-2 py-0.5 rounded text-wasteland-300">+ Действие</button>
-                      </div>
-                      {(rulesObj.actions || []).map((action, i) => (
-                        <div key={i} className="bg-wasteland-800 p-2 rounded mb-1 space-y-1">
-                          <div className="flex gap-1">
-                            <input placeholder="Ключ (attack)" value={action.name || ''} onChange={e => updateAction(i, 'name', e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs" />
-                            <input placeholder="Метка (Атаковать)" value={action.label || ''} onChange={e => updateAction(i, 'label', e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs" />
-                            <button onClick={() => removeAction(i)} className="text-accent-red text-xs px-1">✕</button>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <label className="text-xs text-wasteland-400"><input type="checkbox" checked={action.skill_check || false} onChange={e => updateAction(i, 'skill_check', e.target.checked)} className="mr-1" />Проверка навыка</label>
-                            <label className="text-xs text-wasteland-400"><input type="checkbox" checked={action.consume_ammo || false} onChange={e => updateAction(i, 'consume_ammo', e.target.checked)} className="mr-1" />Тратить патроны</label>
-                            <label className="text-xs text-wasteland-400"><input type="checkbox" checked={action.destroy_on_use || false} onChange={e => updateAction(i, 'destroy_on_use', e.target.checked)} className="mr-1" />Уничтожить</label>
-                            <label className="text-xs text-wasteland-400"><input type="checkbox" checked={action.roll_per_shot || false} onChange={e => updateAction(i, 'roll_per_shot', e.target.checked)} className="mr-1" />Бросок/выстрел</label>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Поля предмета */}
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-wasteland-400 text-xs">Поля предмета</span>
-                        <button onClick={addProperty} className="text-xs bg-wasteland-600 px-2 py-0.5 rounded text-wasteland-300">+ Поле</button>
-                      </div>
-                      {(rulesObj.properties || []).map((prop, i) => (
-                        <div key={i} className="flex gap-1 mb-1">
-                          <input placeholder="Ключ" value={prop.name || ''} onChange={e => updateProperty(i, 'name', e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs" />
-                          <select value={prop.type || 'text'} onChange={e => updateProperty(i, 'type', e.target.value)} className="w-20 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
-                            <option value="text">Текст</option>
-                            <option value="number">Число</option>
-                            <option value="boolean">Да/Нет</option>
-                          </select>
-                          <input placeholder="Метка" value={prop.label || ''} onChange={e => updateProperty(i, 'label', e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs" />
-                          <button onClick={() => removeProperty(i)} className="text-accent-red text-xs px-1">✕</button>
-                        </div>
-                      ))}
-                    </div>
+                {/* Своё правило */}
+                <div>
+                  <label className="text-wasteland-400 text-xs block mb-1">Своё правило:</label>
+                  <div className="flex gap-1 items-center">
+                    <input placeholder="Ключ" value={customKey} onChange={e => setCustomKey(e.target.value)} className="flex-1 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs" />
+                    <select value={customType} onChange={e => setCustomType(e.target.value)} className="w-16 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
+                      <option value="boolean">Да/Нет</option>
+                      <option value="text">Текст</option>
+                      <option value="number">Число</option>
+                    </select>
+                    {customType === 'boolean' ? (
+                      <select value={customValue} onChange={e => setCustomValue(e.target.value)} className="w-12 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs">
+                        <option value="true">Да</option>
+                        <option value="false">Нет</option>
+                      </select>
+                    ) : (
+                      <input value={customValue} onChange={e => setCustomValue(e.target.value)} className="w-20 bg-wasteland-900 border border-wasteland-600 rounded p-1 text-wasteland-100 text-xs" placeholder="Значение" />
+                    )}
+                    <button onClick={addCustomRule} disabled={!customKey.trim()} className="bg-accent-yellow text-wasteland-900 text-xs px-2 py-1 rounded">+</button>
                   </div>
-                )}
-
-                {rulesMode === 'json' && (
-                  <textarea
-                    value={rulesJson}
-                    onChange={e => { setRulesJson(e.target.value); setRulesError(''); }}
-                    className="w-full bg-wasteland-900 border border-wasteland-600 rounded p-2 text-wasteland-100 text-xs font-mono"
-                    rows={12}
-                    placeholder='{"equippable": true, "actions": [...]}'
-                  />
-                )}
-
-                {rulesError && <p className="text-accent-red text-xs">{rulesError}</p>}
+                </div>
 
                 <div className="flex gap-2">
                   <button onClick={handleSaveRules} className="bg-accent-orange text-wasteland-900 text-xs px-3 py-1.5 rounded font-bold">Сохранить правила</button>
